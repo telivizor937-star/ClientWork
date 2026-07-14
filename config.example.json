@@ -1,0 +1,9 @@
+{
+  "portfolio_url": "https://t.me/workinonlybusiness",
+  "minimum_rub_per_video": 500,
+  "notify": {
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    "send_when_no_new_leads": false
+  }
+}
