@@ -141,7 +141,7 @@ def load_config() -> dict:
         "notify": {
             "telegram_bot_token": "",
             "telegram_chat_id": "",
-            "send_when_no_new_leads": False,
+            "send_when_no_new_leads": True,
         },
     }
     if not CONFIG_FILE.exists():

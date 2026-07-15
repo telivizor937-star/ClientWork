@@ -4,6 +4,6 @@
   "notify": {
     "telegram_bot_token": "",
     "telegram_chat_id": "",
-    "send_when_no_new_leads": false
+    "send_when_no_new_leads": true
   }
 }
