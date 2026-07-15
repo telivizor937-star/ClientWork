@@ -413,7 +413,7 @@ def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str
     if token and not chat_id:
         chat_id = discover_telegram_chat_id(config)
     if not token or not chat_id:
-        return
+        raise RuntimeError("Telegram notifications are not configured: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
     if not leads and not notify.get("send_when_no_new_leads", False):
         return
 
@@ -491,8 +491,8 @@ def main() -> int:
 
     try:
         send_telegram_notification(config, new_leads, errors)
-        notification_status = "уведомление отправлено или не настроено"
-    except urllib.error.URLError as error:
+        notification_status = "уведомление отправлено"
+    except (RuntimeError, urllib.error.URLError) as error:
         notification_status = f"уведомление не отправлено: {error}"
 
     summary = [
