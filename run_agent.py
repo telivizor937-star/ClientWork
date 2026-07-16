@@ -449,12 +449,68 @@ def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str
         send_telegram_message(token, chat_id, "Ошибки по каналам:\n" + "\n".join(errors[:5]))
 
 
+def filter_reason_key(reason: str) -> str:
+    if reason == "нет Reels/Shorts/TikTok":
+        return "no_short_video"
+    if reason == "нет монтажа":
+        return "no_montage"
+    if reason == "нет признаков вакансии/заказа":
+        return "no_vacancy"
+    if reason.startswith("есть стоп-слова"):
+        return "stop_words"
+    return "other"
+
+
+def send_run_report(config: dict, report: dict) -> None:
+    notify = config["notify"]
+    token = notify.get("telegram_bot_token", "").strip()
+    chat_id = notify.get("telegram_chat_id", "").strip()
+    if token and not chat_id:
+        chat_id = discover_telegram_chat_id(config)
+    if not token or not chat_id:
+        raise RuntimeError("Telegram notifications are not configured: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
+
+    lines = [
+        "Отчёт поиска лидов",
+        f"Время запуска: {report['started_at']}",
+        f"Каналов проверено: {report['channels_checked']}",
+        f"Постов найдено: {report['posts_found']}",
+        f"Пропущено как уже существующие: {report['existing_posts']}",
+        f"Отфильтровано: {report['filtered_posts']}",
+        "Причины фильтрации:",
+        f"- нет Reels/Shorts/TikTok: {report['filter_reasons']['no_short_video']}",
+        f"- нет монтажа: {report['filter_reasons']['no_montage']}",
+        f"- нет вакансии/заказа: {report['filter_reasons']['no_vacancy']}",
+        f"- стоп-слова: {report['filter_reasons']['stop_words']}",
+        f"Новых лидов: {report['new_leads']}",
+    ]
+    if report["new_leads"] == 0:
+        lines.append("✅ Поиск работает. Новых подходящих лидов нет.")
+    if report["errors"]:
+        lines.append("Ошибки:\n" + "\n".join(report["errors"][:5]))
+
+    send_telegram_message(token, chat_id, "\n".join(lines))
+
+
 def main() -> int:
     config = load_config()
     existing_links = read_existing_links()
     found_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     new_leads: list[Lead] = []
     errors: list[str] = []
+    notification_status = "уведомлений не было"
+    started_at = datetime.now().isoformat(timespec="seconds")
+    channels_checked = 0
+    posts_found = 0
+    existing_posts = 0
+    filtered_posts = 0
+    filter_reasons = {
+        "no_short_video": 0,
+        "no_montage": 0,
+        "no_vacancy": 0,
+        "stop_words": 0,
+        "other": 0,
+    }
 
     for channel in load_channels():
         try:
@@ -462,42 +518,72 @@ def main() -> int:
         except urllib.error.URLError as error:
             errors.append(f"{channel}: {error}")
             continue
+        channels_checked += 1
 
-        for post in parse_posts(page_html, channel):
+        posts = parse_posts(page_html, channel)
+        posts_found += len(posts)
+        for post in posts:
             if post["link"] in existing_links:
+                existing_posts += 1
                 continue
             relevant, reason = is_relevant(post["text"], config)
             if not relevant:
+                filtered_posts += 1
+                filter_reasons[filter_reason_key(reason)] += 1
                 continue
             score, status = score_post(post["text"])
-            new_leads.append(
-                Lead(
-                    found_at=found_at,
-                    channel=channel,
-                    post_date=post["date"],
-                    title=make_title(post["text"]),
-                    budget=extract_budget(post["text"]),
-                    score=score,
-                    status=status,
-                    link=post["link"],
-                    reason=reason,
-                    message=post["text"],
-                    reply_draft=make_reply_draft(config),
-                )
+            lead = Lead(
+                found_at=found_at,
+                channel=channel,
+                post_date=post["date"],
+                title=make_title(post["text"]),
+                budget=extract_budget(post["text"]),
+                score=score,
+                status=status,
+                link=post["link"],
+                reason=reason,
+                message=post["text"],
+                reply_draft=make_reply_draft(config),
             )
+            new_leads.append(lead)
             existing_links.add(post["link"])
+            try:
+                send_telegram_notification(config, [lead], [])
+                notification_status = "уведомление отправлено"
+            except (RuntimeError, urllib.error.URLError) as error:
+                notification_status = f"уведомление не отправлено: {error}"
 
     new_leads.sort(key=lambda lead: lead.score, reverse=True)
     append_leads(new_leads)
 
+    report = {
+        "started_at": started_at,
+        "channels_checked": channels_checked,
+        "posts_found": posts_found,
+        "existing_posts": existing_posts,
+        "filtered_posts": filtered_posts,
+        "filter_reasons": filter_reasons,
+        "new_leads": len(new_leads),
+        "errors": errors,
+    }
+
     try:
-        send_telegram_notification(config, new_leads, errors)
-        notification_status = "уведомление отправлено"
+        send_run_report(config, report)
+        notification_status = "отчёт отправлен"
     except (RuntimeError, urllib.error.URLError) as error:
-        notification_status = f"уведомление не отправлено: {error}"
+        notification_status = f"отчёт не отправлен: {error}"
 
     summary = [
-        f"Запуск: {datetime.now().isoformat(timespec='seconds')}",
+        f"Запуск: {started_at}",
+        f"Каналов проверено: {channels_checked}",
+        f"Постов найдено: {posts_found}",
+        f"Пропущено как уже существующие: {existing_posts}",
+        f"Отфильтровано: {filtered_posts}",
+        "Причины фильтрации:",
+        f"- нет Reels/Shorts/TikTok: {filter_reasons['no_short_video']}",
+        f"- нет монтажа: {filter_reasons['no_montage']}",
+        f"- нет вакансии/заказа: {filter_reasons['no_vacancy']}",
+        f"- стоп-слова: {filter_reasons['stop_words']}",
         f"Новых лидов: {len(new_leads)}",
         f"Таблица: {OUTPUT_FILE}",
         f"Уведомления: {notification_status}",
