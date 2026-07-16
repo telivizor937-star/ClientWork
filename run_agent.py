@@ -144,11 +144,12 @@ def load_config() -> dict:
             "send_when_no_new_leads": True,
         },
     }
-    if not CONFIG_FILE.exists():
+    loaded = {}
+    if CONFIG_FILE.exists():
+        with CONFIG_FILE.open("r", encoding="utf-8") as file:
+            loaded = json.load(file)
+    else:
         CONFIG_FILE.write_text(json.dumps(default, ensure_ascii=False, indent=2), encoding="utf-8")
-        return default
-    with CONFIG_FILE.open("r", encoding="utf-8") as file:
-        loaded = json.load(file)
     config = {**default, **loaded, "notify": {**default["notify"], **loaded.get("notify", {})}}
     if os.getenv("TELEGRAM_BOT_TOKEN"):
         config["notify"]["telegram_bot_token"] = os.environ["TELEGRAM_BOT_TOKEN"]
