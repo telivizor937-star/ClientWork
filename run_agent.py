@@ -262,25 +262,27 @@ def make_title(text: str) -> str:
 
 
 def is_relevant(text: str, config: dict) -> tuple[bool, str]:
+    lowered = text.lower()
     short_video = count_keywords(text, SHORT_VIDEO_KEYWORDS)
     montage = count_keywords(text, MONTAGE_KEYWORDS)
     vacancy = count_keywords(text, VACANCY_KEYWORDS)
     negative = count_keywords(text, NEGATIVE_KEYWORDS)
     candidate = count_keywords(text, CANDIDATE_KEYWORDS)
+    video_context = short_video > 0 or "видео" in lowered or "video" in lowered
 
     if candidate:
         return False, "похоже на резюме исполнителя"
-    if short_video < 1:
-        return False, "нет Reels/Shorts/TikTok"
-    if montage < 1:
-        return False, "нет монтажа"
-    if vacancy < 1:
-        return False, "нет признаков вакансии/заказа"
     if negative:
         return False, "есть стоп-слова: офис/выезд/smm/без оплаты/длинные видео"
     if not has_minimum_budget(text, int(config["minimum_rub_per_video"])):
         return False, "ниже минимальной оплаты"
-    return True, "короткие видео + монтаж + вакансия"
+    if montage < 1:
+        return False, "нет монтажа"
+    if vacancy < 1:
+        return False, "нет признаков вакансии/заказа"
+    if not video_context:
+        return False, "нет Reels/Shorts/TikTok"
+    return True, "видео + монтаж + вакансия"
 
 
 def score_post(text: str) -> tuple[int, str]:
