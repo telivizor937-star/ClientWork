@@ -31,7 +31,7 @@ jobs:
         run: |
           python - <<'PY'
           import os
-          missing = [name for name in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID") if not os.getenv(name)]
+          missing = [name for name in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID") if not os.getenv(name, "").strip()]
           if missing:
               raise SystemExit("Missing GitHub Actions config: " + ", ".join(missing))
           PY
