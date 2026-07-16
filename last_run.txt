@@ -1,4 +1,4 @@
-Запуск: 2026-07-16T08:04:29
-Новых лидов: 4
+Запуск: 2026-07-16T08:36:58
+Новых лидов: 0
 Таблица: /home/runner/work/ClientWork/ClientWork/leads.csv
 Уведомления: уведомление не отправлено: Telegram notifications are not configured: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID
