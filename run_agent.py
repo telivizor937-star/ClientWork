@@ -9,6 +9,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,9 +17,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 CHANNELS_FILE = ROOT / "channels.txt"
+SOURCES_FILE = ROOT / "sources.json"
 CONFIG_FILE = ROOT / "config.json"
 OUTPUT_FILE = ROOT / "leads.csv"
 RUN_LOG_FILE = ROOT / "last_run.txt"
+UNAVAILABLE_CHANNELS_FILE = ROOT / "unavailable_channels.csv"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -134,10 +137,18 @@ class Lead:
     reply_draft: str
 
 
+@dataclass(frozen=True)
+class ChannelSource:
+    url: str
+    category: str
+
+
 def load_config() -> dict:
     default = {
         "portfolio_url": "https://t.me/workinonlybusiness",
         "minimum_rub_per_video": 500,
+        "channel_fetch_workers": 20,
+        "channel_timeout_seconds": 20,
         "notify": {
             "telegram_bot_token": "",
             "telegram_chat_id": "",
@@ -170,16 +181,83 @@ def normalize_channel(raw: str) -> str:
     return f"https://t.me/{raw}"
 
 
+def normalize_source_item(item: object, category: str) -> ChannelSource | None:
+    if isinstance(item, str):
+        channel = normalize_channel(item)
+        return ChannelSource(channel, category) if channel else None
+    if not isinstance(item, dict) or item.get("enabled", True) is False:
+        return None
+
+    raw = str(item.get("url") or item.get("channel") or item.get("username") or "").strip()
+    channel = normalize_channel(raw)
+    if not channel:
+        return None
+
+    item_category = str(item.get("category") or category or "uncategorized").strip() or "uncategorized"
+    return ChannelSource(channel, item_category)
+
+
+def load_sources_file() -> list[ChannelSource]:
+    if not SOURCES_FILE.exists():
+        return []
+
+    data = json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
+    sources: list[ChannelSource] = []
+
+    if isinstance(data, list):
+        for item in data:
+            source = normalize_source_item(item, "sources")
+            if source:
+                sources.append(source)
+        return sources
+
+    if not isinstance(data, dict):
+        return []
+
+    groups = data.get("groups", data)
+    if isinstance(groups, dict):
+        for category, items in groups.items():
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                source = normalize_source_item(item, str(category))
+                if source:
+                    sources.append(source)
+    elif isinstance(groups, list):
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            category = str(group.get("category") or group.get("name") or "uncategorized")
+            items = group.get("channels", [])
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                source = normalize_source_item(item, category)
+                if source:
+                    sources.append(source)
+
+    return sources
+
+
 def channel_name(channel_url: str) -> str:
     return channel_url.rstrip("/").split("/")[-1]
 
 
-def fetch_channel_html(channel_url: str) -> str:
+def fetch_channel_html(channel_url: str, timeout: int = 30) -> str:
     public_name = channel_name(channel_url)
     url = f"https://t.me/s/{public_name}"
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")
+
+
+def channel_unavailable_reason(page_html: str) -> str:
+    lowered = page_html.lower()
+    if "tgme_widget_message" in lowered or "tgme_channel_info" in lowered:
+        return ""
+    if "tgme_page_title" in lowered:
+        return "not_public_or_deleted"
+    return "empty_or_unavailable"
 
 
 def strip_tags(value: str) -> str:
@@ -344,15 +422,60 @@ def append_leads(leads: list[Lead]) -> None:
             writer.writerow(lead.__dict__)
 
 
+def load_channel_sources() -> list[ChannelSource]:
+    sources: list[ChannelSource] = []
+    if CHANNELS_FILE.exists():
+        for line in CHANNELS_FILE.read_text(encoding="utf-8").splitlines():
+            channel = normalize_channel(line)
+            if channel:
+                sources.append(ChannelSource(channel, "channels.txt"))
+
+    sources.extend(load_sources_file())
+
+    unique: dict[str, ChannelSource] = {}
+    for source in sources:
+        unique.setdefault(channel_name(source.url).lower(), source)
+
+    if not unique:
+        raise FileNotFoundError(f"Не найдены каналы: {CHANNELS_FILE} или {SOURCES_FILE}")
+    return list(unique.values())
+
+
 def load_channels() -> list[str]:
-    if not CHANNELS_FILE.exists():
-        raise FileNotFoundError(f"Не найден файл каналов: {CHANNELS_FILE}")
-    channels = [
-        channel
-        for channel in (normalize_channel(line) for line in CHANNELS_FILE.read_text(encoding="utf-8").splitlines())
-        if channel
-    ]
-    return list(dict.fromkeys(channels))
+    return [source.url for source in load_channel_sources()]
+
+
+def write_unavailable_channels(rows: list[dict[str, str]]) -> None:
+    if not rows:
+        if UNAVAILABLE_CHANNELS_FILE.exists():
+            UNAVAILABLE_CHANNELS_FILE.unlink()
+        return
+
+    fieldnames = ["checked_at", "category", "channel", "reason"]
+    with UNAVAILABLE_CHANNELS_FILE.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def fetch_channel_pages(
+    sources: list[ChannelSource], timeout: int, max_workers: int
+) -> list[tuple[ChannelSource, str, str]]:
+    workers = max(1, min(max_workers, len(sources)))
+    results: list[tuple[ChannelSource, str, str]] = []
+
+    def fetch(source: ChannelSource) -> tuple[ChannelSource, str, str]:
+        try:
+            return source, fetch_channel_html(source.url, timeout=timeout), ""
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            return source, "", str(error)
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(fetch, source) for source in sources]
+        for future in as_completed(futures):
+            results.append(future.result())
+
+    return results
 
 
 def split_telegram_text(text: str, limit: int = 3900) -> list[str]:
@@ -500,6 +623,7 @@ def main() -> int:
     found_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     new_leads: list[Lead] = []
     errors: list[str] = []
+    unavailable_channels: list[dict[str, str]] = []
     notification_status = "уведомлений не было"
     started_at = datetime.now().isoformat(timespec="seconds")
     channels_checked = 0
@@ -514,11 +638,36 @@ def main() -> int:
         "other": 0,
     }
 
-    for channel in load_channels():
-        try:
-            page_html = fetch_channel_html(channel)
-        except urllib.error.URLError as error:
-            errors.append(f"{channel}: {error}")
+    channel_sources = load_channel_sources()
+    channel_pages = fetch_channel_pages(
+        channel_sources,
+        timeout=int(config.get("channel_timeout_seconds", 20)),
+        max_workers=int(config.get("channel_fetch_workers", 20)),
+    )
+    for source, page_html, fetch_error in channel_pages:
+        channel = source.url
+        if fetch_error:
+            errors.append(f"{channel}: {fetch_error}")
+            unavailable_channels.append(
+                {
+                    "checked_at": started_at,
+                    "category": source.category,
+                    "channel": channel,
+                    "reason": fetch_error,
+                }
+            )
+            continue
+        unavailable_reason = channel_unavailable_reason(page_html)
+        if unavailable_reason:
+            errors.append(f"{channel}: {unavailable_reason}")
+            unavailable_channels.append(
+                {
+                    "checked_at": started_at,
+                    "category": source.category,
+                    "channel": channel,
+                    "reason": unavailable_reason,
+                }
+            )
             continue
         channels_checked += 1
 
@@ -555,6 +704,7 @@ def main() -> int:
             except (RuntimeError, urllib.error.URLError) as error:
                 notification_status = f"уведомление не отправлено: {error}"
 
+    write_unavailable_channels(unavailable_channels)
     new_leads.sort(key=lambda lead: lead.score, reverse=True)
     append_leads(new_leads)
 

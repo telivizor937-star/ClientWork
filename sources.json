@@ -1,0 +1,74 @@
+{
+  "groups": {
+    "video_editing": [
+      "GetJob_videoedit",
+      "reelsmaker_tinder",
+      "vakansii_reelsmaker",
+      "editors_video",
+      "real_video_client",
+      "video_editor_jobs",
+      "montage_job",
+      "videomontage_work",
+      "reels_work",
+      "shorts_work",
+      "tiktok_jobs",
+      "capcut_jobs"
+    ],
+    "freelance": [
+      "freelancce",
+      "Koteyka_Freelancer",
+      "freelancechoice",
+      "freelancehunt",
+      "freelance_taverna",
+      "workzavr",
+      "workathome",
+      "distantsiya",
+      "remotejobss",
+      "jobfreelance",
+      "freelance_vacancies",
+      "freelance_ru"
+    ],
+    "creative_jobs": [
+      "Panteon_WORK",
+      "prodjob",
+      "dddwork",
+      "designer_jobs",
+      "creative_jobs",
+      "digital_hr",
+      "media_jobs",
+      "content_jobs",
+      "smm_jobs",
+      "marketing_jobs",
+      "creator_jobs",
+      "blogger_jobs"
+    ],
+    "remote_work": [
+      "udafrii",
+      "Finder_VC",
+      "workindeed",
+      "jobscode",
+      "vacanciesrus",
+      "job_for_junior",
+      "hh_vacancy",
+      "remoteit",
+      "distantsiya2",
+      "work_remote",
+      "zarabotok",
+      "rabota_remote"
+    ],
+    "media_production": [
+      "kinopoisk_jobs",
+      "production_jobs",
+      "producer_job",
+      "motion_jobs",
+      "after_effects_jobs",
+      "premiere_jobs",
+      "youtube_jobs",
+      "podcast_jobs",
+      "videographer_jobs",
+      "postproduction_jobs",
+      "studio_jobs",
+      "media_work"
+    ]
+  }
+}
