@@ -179,6 +179,8 @@ def load_config() -> dict:
         "max_post_age_hours": 72,
         "channel_fetch_workers": 20,
         "channel_timeout_seconds": 20,
+        "openrouter_model": "openrouter/free",
+        "openrouter_api_key": "",
         "notify": {
             "telegram_bot_token": "",
             "telegram_chat_id": "",
@@ -196,6 +198,8 @@ def load_config() -> dict:
         config["notify"]["telegram_bot_token"] = os.environ["TELEGRAM_BOT_TOKEN"]
     if os.getenv("TELEGRAM_CHAT_ID"):
         config["notify"]["telegram_chat_id"] = os.environ["TELEGRAM_CHAT_ID"]
+    if os.getenv("OPENROUTER_API_KEY"):
+        config["openrouter_api_key"] = os.environ["OPENROUTER_API_KEY"]
     return config
 
 
@@ -496,31 +500,80 @@ def extract_project_feature(text: str) -> str:
 
 
 def make_reply_draft(config: dict, text: str) -> str:
-    niche = detect_niche(text)
-    content_type = detect_content_type(text)
-    requirements = detect_requirements(text)
-    budget = extract_budget(text)
-    feature = extract_project_feature(text)
+    api_key = str(config.get("openrouter_api_key", "")).strip()
+    if not api_key:
+        return make_fallback_reply(config)
 
-    lines = [
-        "Здравствуйте! Прочитал вакансию.",
-        f"Понял, что нужен монтаж для {niche}: {content_type}.",
-    ]
-    if feature:
-        lines.append(f"По задаче вижу главное: {feature}")
-    if requirements:
-        lines.append(f"Могу закрыть по монтажу: {', '.join(requirements)}.")
-    else:
-        lines.append("Могу взять монтаж, собрать ролик по структуре, темпу и удержанию.")
-    if budget:
-        lines.append(f"Бюджет увидел: {budget}.")
-    lines.extend(
-        [
-            f"Портфолио: {config['portfolio_url']}",
-            "Если формат подходит, пришлите ТЗ и пример роликов, на которые ориентироваться.",
-        ]
+    prompt = (
+        "Ты пишешь короткий отклик на вакансию видеомонтажёра.\n\n"
+        "Пиши как обычный человек, а не как нейросеть.\n"
+        "Не анализируй и не пересказывай вакансию.\n"
+        "Не придумывай опыт, навыки и выполненные проекты.\n"
+        "Не упоминай программы монтажа, если это не нужно.\n"
+        "Длина: 3–5 коротких предложений.\n\n"
+        "Формат:\n"
+        "приветствие;\n"
+        "короткий релевантный отклик;\n"
+        f"портфолио: {config['portfolio_url']};\n"
+        "предложение обсудить детали.\n\n"
+        "Верни только готовое сообщение.\n\n"
+        "Полный текст вакансии:\n"
+        f"{text}"
     )
-    return "\n\n".join(lines)
+    data = json.dumps(
+        {
+            "model": config.get("openrouter_model", "openrouter/free"),
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.8,
+            "max_tokens": 260,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/telivizor937-star/ClientWork",
+            "X-Title": "ClientWork Lead Agent",
+            "User-Agent": USER_AGENT,
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=45) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        reply = payload["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError):
+        return make_fallback_reply(config)
+
+    return clean_reply_draft(reply, config)
+
+
+def clean_reply_draft(reply: str, config: dict) -> str:
+    forbidden = [
+        "прочитал вакансию",
+        "понял, что нужен",
+        "понял что нужен",
+        "по задаче вижу",
+    ]
+    normalized = reply.lower()
+    if not reply or any(phrase in normalized for phrase in forbidden):
+        return make_fallback_reply(config)
+    portfolio_url = config["portfolio_url"]
+    if portfolio_url not in reply:
+        reply = f"{reply.rstrip()}\n\nПортфолио: {portfolio_url}"
+    return reply.strip()
+
+
+def make_fallback_reply(config: dict) -> str:
+    return (
+        "Здравствуйте! Интересно поработать над этим монтажом.\n\n"
+        "Сделаю аккуратно, с нормальным темпом и вниманием к деталям.\n\n"
+        f"Портфолио: {config['portfolio_url']}\n\n"
+        "Напишите, обсудим детали."
+    )
 
 
 def read_existing_links() -> set[str]:
