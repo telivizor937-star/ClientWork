@@ -2,6 +2,15 @@ name: Reels lead agent
 
 on:
   workflow_dispatch:
+    inputs:
+      test_telegram:
+        description: "Send a Telegram test message and exit"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
   push:
     branches: [main]
   schedule:
@@ -35,6 +44,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run agent
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_telegram == 'true') }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
@@ -48,7 +58,30 @@ jobs:
           PY
           python run_agent.py
 
+      - name: Send Telegram test
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_telegram == 'true' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import datetime, timezone
+          import run_agent
+
+          token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+          chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+          missing = [name for name, value in (("TELEGRAM_BOT_TOKEN", token), ("TELEGRAM_CHAT_ID", chat_id)) if not value]
+          if missing:
+              raise SystemExit("Missing GitHub Actions config: " + ", ".join(missing))
+
+          timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+          run_agent.send_telegram_message(token, chat_id, f"\u0422\u0435\u0441\u0442 Telegram \u0438\u0437 GitHub Actions\n{timestamp}")
+          print("Telegram test message sent")
+          PY
+
       - name: Save runtime state
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_telegram == 'true') }}
         run: |
           git config user.name "reels-lead-agent"
           git config user.email "actions@github.com"
