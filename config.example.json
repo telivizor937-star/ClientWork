@@ -1,12 +1,29 @@
 {
   "portfolio_url": "https://t.me/workinonlybusiness",
   "minimum_rub_per_video": 500,
-  "max_post_age_hours": 72,
+  "max_post_age_hours": 24,
+  "max_leads_per_run": 12,
+  "rotating_source_group_size": 35,
   "openrouter_model": "google/gemma-3-27b-it:free",
   "openrouter_api_key": "",
   "notify": {
     "telegram_bot_token": "",
     "telegram_chat_id": "",
-    "send_when_no_new_leads": true
+    "send_when_no_new_leads": true,
+    "send_run_report": false
+  },
+  "source_discovery": {
+    "enabled": true,
+    "interval_hours": 24,
+    "max_new_sources_per_run": 20,
+    "max_post_age_days": 120,
+    "max_candidates_per_run": 160,
+    "workers": 16
+  },
+  "daily_table": {
+    "enabled": true,
+    "send_time": "20:00",
+    "timezone_offset_hours": 4,
+    "format": "csv"
   }
 }

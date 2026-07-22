@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import html
 import json
 import os
@@ -22,6 +23,8 @@ CONFIG_FILE = ROOT / "config.json"
 OUTPUT_FILE = ROOT / "leads.csv"
 RUN_LOG_FILE = ROOT / "last_run.txt"
 UNAVAILABLE_CHANNELS_FILE = ROOT / "unavailable_channels.csv"
+DISCOVERED_SOURCES_FILE = ROOT / "discovered_sources.csv"
+RUNTIME_STATE_FILE = ROOT / "runtime_state.json"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -170,6 +173,12 @@ class Lead:
     reason: str
     message: str
     reply_draft: str
+    lead_id: str = ""
+    contact_status: str = "not_contacted"
+    contacted_at: str = ""
+    client_answered: str = "no"
+    client_answered_at: str = ""
+    notes: str = ""
 
 
 @dataclass(frozen=True)
@@ -189,15 +198,26 @@ def load_config() -> dict:
     default = {
         "portfolio_url": "https://t.me/workinonlybusiness",
         "minimum_rub_per_video": 500,
-        "max_post_age_hours": 72,
+        "max_post_age_hours": 24,
+        "max_leads_per_run": 12,
         "channel_fetch_workers": 20,
         "channel_timeout_seconds": 20,
+        "rotating_source_group_size": 35,
         "openrouter_model": "google/gemma-3-27b-it:free",
         "openrouter_api_key": "",
+        "source_discovery": {
+            "enabled": True,
+            "interval_hours": 24,
+            "max_new_sources_per_run": 20,
+            "max_post_age_days": 120,
+            "max_candidates_per_run": 160,
+            "workers": 16,
+        },
         "notify": {
             "telegram_bot_token": "",
             "telegram_chat_id": "",
             "send_when_no_new_leads": True,
+            "send_run_report": False,
         },
     }
     loaded = {}
@@ -206,7 +226,12 @@ def load_config() -> dict:
             loaded = json.load(file)
     else:
         CONFIG_FILE.write_text(json.dumps(default, ensure_ascii=False, indent=2), encoding="utf-8")
-    config = {**default, **loaded, "notify": {**default["notify"], **loaded.get("notify", {})}}
+    config = {
+        **default,
+        **loaded,
+        "notify": {**default["notify"], **loaded.get("notify", {})},
+        "source_discovery": {**default["source_discovery"], **loaded.get("source_discovery", {})},
+    }
     if os.getenv("TELEGRAM_BOT_TOKEN"):
         config["notify"]["telegram_bot_token"] = os.environ["TELEGRAM_BOT_TOKEN"]
     if os.getenv("TELEGRAM_CHAT_ID"):
@@ -577,52 +602,61 @@ def request_openrouter_reply(api_key: str, model: str, system_prompt: str, vacan
 
 
 def clean_reply_draft(reply: str, config: dict) -> str:
-    forbidden = [
-        "we need",
-        "let's craft",
-        "i need",
-        "the user",
-        "нужно написать",
-        "прочитал вакансию",
-        "понял, что нужен",
-        "понял что нужен",
-        "по задаче вижу",
-    ]
     reply = reply.strip()
-    if is_invalid_model_output(reply, forbidden):
+    if is_invalid_model_output(reply):
         return ""
     portfolio_url = config["portfolio_url"]
     if portfolio_url not in reply:
-        reply = f"{reply.rstrip()}\n\nПортфолио: {portfolio_url}"
-    return reply.strip()
+        reply = f"{reply.rstrip()}\n\n?????????: {portfolio_url}"
+    return "" if is_invalid_model_output(reply) else reply.strip()
 
 
 def is_invalid_model_output(value: str, extra_forbidden: list[str] | None = None) -> bool:
     forbidden = [
+        "user safety",
+        "safe",
+        "unsafe",
         "we need",
         "let's craft",
         "i need",
         "the user",
-        "нужно написать",
-        "рассуждение",
-        "рассуждения",
-        "анализ",
-        "план",
-        "инструкция",
-        "инструкции",
+        "????? ????????",
+        "??????? ??????",
+        "reasoning",
+        "analysis",
+        "???????????",
+        "???????????",
+        "??????",
+        "????",
+        "??????????",
+        "??????????",
     ]
     if extra_forbidden:
         forbidden.extend(extra_forbidden)
     normalized = value.strip().lower()
-    return not normalized or any(phrase in normalized for phrase in forbidden)
+    if not normalized or len(normalized) < 40:
+        return True
+    if normalized in {"safe", "unsafe", "user safety: safe", "user safety: unsafe"}:
+        return True
+    if any(phrase in normalized for phrase in forbidden):
+        return True
+    if normalized.startswith("{") or normalized.startswith("[") or '"role"' in normalized or '"content"' in normalized:
+        return True
+    if re.fullmatch(r"https?://\S+", normalized):
+        return True
+    if not re.search(r"[.!?]\s|[.!?]$", value):
+        return True
+    if not re.search(r"(????????????|??????|??????|?????|????|??????|????????|?????)", normalized):
+        return True
+    return False
 
 
 def make_fallback_reply(config: dict) -> str:
     return (
-        "Здравствуйте! Интересно поработать над этим монтажом.\n\n"
-        "Сделаю аккуратно, с нормальным темпом и вниманием к деталям.\n\n"
-        f"Портфолио: {config['portfolio_url']}\n\n"
-        "Напишите, обсудим детали."
+        "????????????! ????????? ?????????? ??? ???? ????????. "
+        "?????? ?????????, ? ?????????? ?????? ? ????????? ? ???????. "
+        "????? ???????? ?????? ? ?????? ??????.\n\n"
+        f"?????????: {config['portfolio_url']}"
     )
 
 
@@ -687,34 +721,125 @@ def make_fallback_vacancy_brief(text: str, budget: str) -> VacancyBrief:
     )
 
 
-def read_existing_links() -> set[str]:
+LEADS_FIELDNAMES = [
+    "lead_id",
+    "found_at",
+    "title",
+    "source",
+    "vacancy_url",
+    "budget",
+    "summary",
+    "generated_reply",
+    "contact_status",
+    "contacted_at",
+    "client_answered",
+    "client_answered_at",
+    "notes",
+    "post_date",
+    "score",
+    "status",
+    "reason",
+    "message",
+]
+
+
+def make_lead_id(url: str) -> str:
+    return hashlib.sha1(url.encode("utf-8")).hexdigest()[:12]
+
+
+def lead_to_row(lead: Lead) -> dict[str, str]:
+    return {
+        "lead_id": lead.lead_id or make_lead_id(lead.link),
+        "found_at": lead.found_at,
+        "title": lead.title,
+        "source": lead.channel,
+        "vacancy_url": lead.link,
+        "budget": lead.budget,
+        "summary": make_title(lead.message),
+        "generated_reply": lead.reply_draft,
+        "contact_status": lead.contact_status or "not_contacted",
+        "contacted_at": lead.contacted_at,
+        "client_answered": lead.client_answered or "no",
+        "client_answered_at": lead.client_answered_at,
+        "notes": lead.notes,
+        "post_date": lead.post_date,
+        "score": str(lead.score),
+        "status": lead.status,
+        "reason": lead.reason,
+        "message": lead.message,
+    }
+
+
+def normalize_lead_row(row: dict[str, str]) -> dict[str, str]:
+    vacancy_url = row.get("vacancy_url") or row.get("link") or ""
+    message = row.get("message", "")
+    normalized = {field: row.get(field, "") for field in LEADS_FIELDNAMES}
+    normalized["lead_id"] = row.get("lead_id") or make_lead_id(vacancy_url)
+    normalized["found_at"] = row.get("found_at", "")
+    normalized["title"] = row.get("title", "")
+    normalized["source"] = row.get("source") or row.get("channel", "")
+    normalized["vacancy_url"] = vacancy_url
+    normalized["budget"] = row.get("budget", "")
+    normalized["summary"] = row.get("summary") or make_title(message)
+    normalized["generated_reply"] = row.get("generated_reply") or row.get("reply_draft", "")
+    normalized["contact_status"] = row.get("contact_status") or "not_contacted"
+    normalized["contacted_at"] = row.get("contacted_at", "")
+    normalized["client_answered"] = row.get("client_answered") or "no"
+    normalized["client_answered_at"] = row.get("client_answered_at", "")
+    normalized["notes"] = row.get("notes", "")
+    normalized["post_date"] = row.get("post_date", "")
+    normalized["score"] = row.get("score", "")
+    normalized["status"] = row.get("status", "")
+    normalized["reason"] = row.get("reason", "")
+    normalized["message"] = message
+    return normalized
+
+
+def read_lead_rows() -> list[dict[str, str]]:
     if not OUTPUT_FILE.exists():
-        return set()
+        return []
     with OUTPUT_FILE.open("r", encoding="utf-8-sig", newline="") as file:
-        return {row["link"] for row in csv.DictReader(file) if row.get("link")}
+        return [normalize_lead_row(row) for row in csv.DictReader(file)]
+
+
+def write_lead_rows(rows: list[dict[str, str]]) -> None:
+    with OUTPUT_FILE.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=LEADS_FIELDNAMES)
+        writer.writeheader()
+        writer.writerows([{field: row.get(field, "") for field in LEADS_FIELDNAMES} for row in rows])
+
+
+def read_existing_links() -> set[str]:
+    return {row["vacancy_url"] for row in read_lead_rows() if row.get("vacancy_url")}
 
 
 def append_leads(leads: list[Lead]) -> None:
-    fieldnames = [
-        "found_at",
-        "channel",
-        "post_date",
-        "title",
-        "budget",
-        "score",
-        "status",
-        "link",
-        "reason",
-        "message",
-        "reply_draft",
-    ]
-    exists = OUTPUT_FILE.exists()
-    with OUTPUT_FILE.open("a", encoding="utf-8-sig", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        if not exists:
-            writer.writeheader()
-        for lead in leads:
-            writer.writerow(lead.__dict__)
+    if not leads:
+        return
+    rows = read_lead_rows()
+    existing_ids = {row["lead_id"] for row in rows}
+    for lead in leads:
+        row = lead_to_row(lead)
+        if row["lead_id"] not in existing_ids:
+            rows.append(row)
+            existing_ids.add(row["lead_id"])
+    write_lead_rows(rows)
+
+
+def update_lead_status(lead_id: str, contact_status: str, now: datetime) -> bool:
+    rows = read_lead_rows()
+    changed = False
+    for row in rows:
+        if row.get("lead_id") != lead_id:
+            continue
+        row["contact_status"] = contact_status
+        if contact_status == "contacted" and not row.get("contacted_at"):
+            row["contacted_at"] = now.isoformat(timespec="seconds")
+        changed = True
+        break
+    if changed:
+        write_lead_rows(rows)
+    return changed
 
 
 def load_channel_sources() -> list[ChannelSource]:
@@ -740,6 +865,152 @@ def load_channels() -> list[str]:
     return [source.url for source in load_channel_sources()]
 
 
+def default_runtime_state() -> dict:
+    return {
+        "next_source_group_index": 0,
+        "last_message_ids": {},
+        "sent_urls": [],
+        "sent_message_ids": [],
+        "sent_text_hashes": [],
+        "sent_text_fingerprints": [],
+        "last_checked_at": "",
+        "telegram_update_offset": 0,
+        "last_daily_table_sent_date": "",
+    }
+
+
+def load_runtime_state() -> dict:
+    if not RUNTIME_STATE_FILE.exists():
+        return default_runtime_state()
+    try:
+        loaded = json.loads(RUNTIME_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default_runtime_state()
+    state = default_runtime_state()
+    for key, value in loaded.items():
+        if key in state:
+            state[key] = value
+    return state
+
+
+def save_runtime_state(state: dict) -> None:
+    RUNTIME_STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def post_message_id(post: dict[str, str]) -> int:
+    match = re.search(r"/(\d+)(?:\?|$)", post.get("link", ""))
+    return int(match.group(1)) if match else 0
+
+
+def post_message_key(post: dict[str, str]) -> str:
+    return f"{channel_name(post.get('channel', ''))}:{post_message_id(post)}"
+
+
+def normalize_text_for_dedupe(text: str) -> str:
+    lowered = text.lower()
+    lowered = re.sub(r"https?://\S+", " ", lowered)
+    lowered = re.sub(r"@\w+", " ", lowered)
+    lowered = re.sub(r"[^a-zа-яё0-9]+", " ", lowered, flags=re.I)
+    return re.sub(r"\s+", " ", lowered).strip()
+
+
+def text_hash(text: str) -> str:
+    return hashlib.sha256(normalize_text_for_dedupe(text).encode("utf-8")).hexdigest()
+
+
+def text_fingerprint(text: str) -> str:
+    tokens = [token for token in normalize_text_for_dedupe(text).split() if len(token) > 3]
+    return " ".join(sorted(set(tokens))[:160])
+
+
+def is_near_duplicate_text(fingerprint: str, existing_fingerprints: list[str]) -> bool:
+    current = set(fingerprint.split())
+    if len(current) < 8:
+        return False
+    for item in existing_fingerprints[-800:]:
+        other = set(str(item).split())
+        if not other:
+            continue
+        overlap = len(current & other) / max(len(current), len(other))
+        if overlap >= 0.88:
+            return True
+    return False
+
+
+def trim_state_lists(state: dict, limit: int = 5000) -> None:
+    for key in ["sent_urls", "sent_message_ids", "sent_text_hashes", "sent_text_fingerprints"]:
+        values = list(dict.fromkeys(state.get(key, [])))
+        state[key] = values[-limit:]
+
+
+def mark_lead_sent(state: dict, lead: Lead) -> None:
+    post = {"channel": lead.channel, "link": lead.link, "text": lead.message}
+    state.setdefault("sent_urls", []).append(lead.link)
+    state.setdefault("sent_message_ids", []).append(post_message_key(post))
+    state.setdefault("sent_text_hashes", []).append(text_hash(lead.message))
+    state.setdefault("sent_text_fingerprints", []).append(text_fingerprint(lead.message))
+    update_last_message_id(state, post)
+    trim_state_lists(state)
+
+
+def is_priority_source(source: ChannelSource) -> bool:
+    name = channel_name(source.url).lower()
+    category = source.category.lower()
+    profile_markers = [
+        "video",
+        "montage",
+        "reels",
+        "shorts",
+        "tiktok",
+        "motion",
+        "youtube",
+        "editor",
+        "videographer",
+    ]
+    return category in {"channels.txt", "video_editing", "media_production"} or any(
+        marker in name or marker in category for marker in profile_markers
+    )
+
+
+def select_sources_for_run(sources: list[ChannelSource], state: dict, config: dict) -> list[ChannelSource]:
+    priority = [source for source in sources if is_priority_source(source)]
+    rotating = [source for source in sources if not is_priority_source(source)]
+    group_size = max(1, int(config.get("rotating_source_group_size", 35)))
+    groups = [rotating[index : index + group_size] for index in range(0, len(rotating), group_size)]
+    group_index = int(state.get("next_source_group_index", 0))
+    current_group = groups[group_index % len(groups)] if groups else []
+    state["next_source_group_index"] = (group_index + 1) % max(1, len(groups))
+
+    selected: dict[str, ChannelSource] = {}
+    for source in priority + current_group:
+        selected.setdefault(channel_name(source.url).lower(), source)
+    return list(selected.values())
+
+
+def is_duplicate_post(post: dict[str, str], state: dict, existing_links: set[str]) -> bool:
+    message_id = post_message_id(post)
+    source_name = channel_name(post["channel"])
+    if message_id and message_id <= int(state.get("last_message_ids", {}).get(source_name, 0)):
+        return True
+    if post["link"] in existing_links or post["link"] in set(state.get("sent_urls", [])):
+        return True
+    if post_message_key(post) in set(state.get("sent_message_ids", [])):
+        return True
+    current_hash = text_hash(post["text"])
+    if current_hash in set(state.get("sent_text_hashes", [])):
+        return True
+    return is_near_duplicate_text(text_fingerprint(post["text"]), list(state.get("sent_text_fingerprints", [])))
+
+
+def update_last_message_id(state: dict, post: dict[str, str]) -> None:
+    message_id = post_message_id(post)
+    if not message_id:
+        return
+    source_name = channel_name(post["channel"])
+    values = state.setdefault("last_message_ids", {})
+    values[source_name] = max(int(values.get(source_name, 0)), message_id)
+
+
 def write_unavailable_channels(rows: list[dict[str, str]]) -> None:
     if not rows:
         if UNAVAILABLE_CHANNELS_FILE.exists():
@@ -751,6 +1022,253 @@ def write_unavailable_channels(rows: list[dict[str, str]]) -> None:
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+DISCOVERY_QUERIES = [
+    "\u043c\u043e\u043d\u0442\u0430\u0436", "\u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436", "\u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440", "\u043c\u043e\u043d\u0442\u0430\u0436\u0451\u0440", "reels", "shorts",
+    "video editor", "motion", "motion designer", "youtube", "youtube editor",
+    "tiktok", "\u043a\u043e\u043d\u0442\u0435\u043d\u0442", "digital", "smm", "freelance", "\u0443\u0434\u0430\u043b\u0435\u043d\u043d\u0430\u044f \u0440\u0430\u0431\u043e\u0442\u0430",
+    "\u0443\u0434\u0430\u043b\u0451\u043d\u043d\u0430\u044f \u0440\u0430\u0431\u043e\u0442\u0430", "\u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438", "\u0440\u0430\u0431\u043e\u0442\u0430", "\u043a\u0440\u0435\u0430\u0442\u0438\u0432", "videographer",
+    "content creator", "digital jobs", "marketing jobs", "creative jobs",
+    "remote jobs", "freelance jobs", "video editing jobs", "shorts editor",
+]
+
+DISCOVERY_INDEX_URLS = [
+    ("search-t", "https://search-t.me/search?query={query}"),
+    ("tgstat", "https://tgstat.ru/search?query={query}"),
+    ("tgstat", "https://tgstat.org/search?query={query}"),
+    ("tgstat", "https://tgstat.org/top100/683/career/"),
+    ("telemetr", "https://telemetr.me/channels/?q={query}"),
+    ("telemetr", "https://telemetr.me/catalog/jobs"),
+    ("semagram", "https://semagram.ru/search?query={query}"),
+    ("telegram_directory", "https://telegramchannels.me/search?search={query}"),
+    ("telegram_directory", "https://tlgrm.eu/channels?search={query}"),
+    ("google", "https://www.google.com/search?q={query}+site%3At.me%2Fs"),
+    ("google", "https://www.google.com/search?q={query}+Telegram+channel"),
+]
+
+DISCOVERY_RELEVANCE_KEYWORDS = [
+    "\u043c\u043e\u043d\u0442\u0430\u0436", "\u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436", "\u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440", "\u043c\u043e\u043d\u0442\u0430\u0436\u0451\u0440", "reels", "shorts",
+    "video editor", "motion designer", "youtube editor", "tiktok", "tik tok",
+]
+
+DISCOVERY_VACANCY_KEYWORDS = [
+    "\u0438\u0449\u0435\u043c", "\u0438\u0449\u0443", "\u043d\u0443\u0436\u0435\u043d", "\u043d\u0443\u0436\u043d\u0430", "\u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f", "\u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f", "\u0440\u0430\u0431\u043e\u0442\u0430",
+    "\u0437\u0430\u043a\u0430\u0437", "\u043f\u0440\u043e\u0435\u043a\u0442", "\u043e\u043f\u043b\u0430\u0442\u0430", "\u0431\u044e\u0434\u0436\u0435\u0442", "hiring", "job", "vacancy",
+    "looking for", "remote", "freelance",
+]
+
+TELEGRAM_USERNAME_RE = re.compile(r"(?:https?://t\.me/(?:s/)?|@)([A-Za-z0-9_]{4,32})", re.I)
+RESERVED_TELEGRAM_NAMES = {"joinchat", "addstickers", "share", "iv", "s", "c", "telegram"}
+
+
+def source_discovery_due(config: dict, now: datetime) -> bool:
+    discovery = config.get("source_discovery", {})
+    if not discovery.get("enabled", True):
+        return False
+    if not DISCOVERED_SOURCES_FILE.exists():
+        return True
+
+    latest: datetime | None = None
+    try:
+        with DISCOVERED_SOURCES_FILE.open("r", encoding="utf-8-sig", newline="") as file:
+            for row in csv.DictReader(file):
+                value = row.get("discovered_at", "")
+                parsed = parse_post_datetime(value)
+                if parsed and (latest is None or parsed > latest):
+                    latest = parsed
+    except (OSError, csv.Error):
+        return True
+    if latest is None:
+        return True
+    return now - latest >= timedelta(hours=int(discovery.get("interval_hours", 24)))
+
+
+def fetch_url(url: str, timeout: int = 20) -> str:
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def discover_candidate_usernames(timeout: int = 20) -> dict[str, set[str]]:
+    candidates: dict[str, set[str]] = {}
+    tasks: list[tuple[str, str]] = []
+    for provider, template in DISCOVERY_INDEX_URLS:
+        if "{query}" not in template:
+            tasks.append((provider, template))
+            continue
+        for query in DISCOVERY_QUERIES:
+            tasks.append((provider, template.format(query=urllib.parse.quote_plus(query))))
+
+    def fetch_index(task: tuple[str, str]) -> tuple[str, str]:
+        provider, url = task
+        try:
+            return provider, fetch_url(url, timeout=timeout)
+        except (urllib.error.URLError, TimeoutError, OSError):
+            return provider, ""
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(fetch_index, task) for task in tasks]
+        for future in as_completed(futures):
+            provider, page_html = future.result()
+            if not page_html:
+                continue
+            for match in TELEGRAM_USERNAME_RE.findall(page_html):
+                username = match.strip("/_")
+                lowered = username.lower()
+                if lowered in RESERVED_TELEGRAM_NAMES:
+                    continue
+                if re.fullmatch(r"[A-Za-z0-9_]{4,32}", username):
+                    candidates.setdefault(lowered, set()).add(provider)
+    return candidates
+
+
+def load_existing_source_names() -> set[str]:
+    names = {channel_name(source.url).lower() for source in load_channel_sources()}
+    if DISCOVERED_SOURCES_FILE.exists():
+        try:
+            with DISCOVERED_SOURCES_FILE.open("r", encoding="utf-8-sig", newline="") as file:
+                for row in csv.DictReader(file):
+                    if row.get("status") == "accepted":
+                        names.add(str(row.get("username", "")).lower())
+        except (OSError, csv.Error):
+            pass
+    return names
+
+
+def discovery_relevance(text: str) -> bool:
+    lowered = text.lower()
+    return any(item in lowered for item in DISCOVERY_RELEVANCE_KEYWORDS) and any(
+        item in lowered for item in DISCOVERY_VACANCY_KEYWORDS
+    )
+
+
+def verify_discovered_source(username: str, max_age_days: int, timeout: int = 15) -> tuple[bool, str]:
+    channel_url = f"https://t.me/{username}"
+    try:
+        page_html = fetch_channel_html(channel_url, timeout=timeout)
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        return False, f"unavailable: {error}"
+
+    unavailable_reason = channel_unavailable_reason(page_html)
+    if unavailable_reason:
+        return False, unavailable_reason
+
+    now = datetime.now(timezone.utc)
+    posts = parse_posts(page_html, channel_url)
+    latest_post = max((parse_post_datetime(post["date"]) for post in posts), default=None)
+    if latest_post is None or now - latest_post > timedelta(days=max_age_days):
+        return False, "no_recent_posts"
+
+    for query in DISCOVERY_RELEVANCE_KEYWORDS:
+        try:
+            query_url = f"https://t.me/s/{username}?q={urllib.parse.quote(query)}"
+            search_html = fetch_url(query_url, timeout=timeout)
+        except (urllib.error.URLError, TimeoutError, OSError):
+            continue
+        for post in parse_posts(search_html, channel_url):
+            parsed = parse_post_datetime(post["date"])
+            if not parsed or now - parsed > timedelta(days=max_age_days):
+                continue
+            if discovery_relevance(post["text"]):
+                return True, f"accepted: {post['link']}"
+    return False, "no_verified_video_vacancy"
+
+
+def append_discovery_history(rows: list[dict[str, str]]) -> None:
+    if not rows:
+        return
+    fieldnames = ["discovered_at", "username", "url", "status", "reason"]
+    exists = DISCOVERED_SOURCES_FILE.exists()
+    with DISCOVERED_SOURCES_FILE.open("a", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        if not exists:
+            writer.writeheader()
+        writer.writerows(rows)
+
+
+def add_sources_to_sources_json(usernames: list[str]) -> None:
+    if not usernames:
+        return
+    data: dict = {"groups": {}}
+    if SOURCES_FILE.exists():
+        data = json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
+    groups = data.setdefault("groups", {})
+    target = groups.setdefault("auto_discovered_sources", [])
+    seen = {str(item).lower() for values in groups.values() if isinstance(values, list) for item in values}
+    for username in usernames:
+        lowered = username.lower()
+        if lowered not in seen:
+            target.append(username)
+            seen.add(lowered)
+    SOURCES_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def run_source_discovery(config: dict, now: datetime) -> dict[str, int | str]:
+    if not source_discovery_due(config, now):
+        return {"status": "skipped", "candidates": 0, "checked": 0, "added": 0}
+
+    discovery = config.get("source_discovery", {})
+    max_new = int(discovery.get("max_new_sources_per_run", 20))
+    max_age_days = int(discovery.get("max_post_age_days", 120))
+    max_candidates = int(discovery.get("max_candidates_per_run", 160))
+    workers = max(1, int(discovery.get("workers", 16)))
+    found_at = now.isoformat(timespec="seconds")
+    candidates = discover_candidate_usernames()
+    existing = load_existing_source_names()
+    history_rows: list[dict[str, str]] = []
+    accepted: list[str] = []
+    checked = 0
+
+    pending = [name for name in sorted(candidates) if name not in existing][:max_candidates]
+    for name in sorted(candidates):
+        if name in existing:
+            history_rows.append(
+                {
+                    "discovered_at": found_at,
+                    "username": name,
+                    "url": f"https://t.me/{name}",
+                    "status": "duplicate",
+                    "reason": "already_in_sources",
+                }
+            )
+
+    def verify(name: str) -> tuple[str, bool, str]:
+        ok, reason = verify_discovered_source(name, max_age_days=max_age_days)
+        return name, ok, reason
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(verify, name) for name in pending]
+        for future in as_completed(futures):
+            username, ok, reason = future.result()
+            checked += 1
+            status = "accepted" if ok and len(accepted) < max_new else "rejected"
+            if ok and len(accepted) < max_new:
+                accepted.append(username)
+            elif ok:
+                reason = "accepted_limit_reached"
+            history_rows.append(
+                {
+                    "discovered_at": found_at,
+                    "username": username,
+                    "url": f"https://t.me/{username}",
+                    "status": status,
+                    "reason": reason,
+                }
+            )
+    add_sources_to_sources_json(accepted)
+    if not history_rows:
+        history_rows.append(
+            {
+                "discovered_at": found_at,
+                "username": "",
+                "url": "",
+                "status": "done",
+                "reason": "no_candidates",
+            }
+        )
+    append_discovery_history(history_rows)
+    return {"status": "done", "candidates": len(candidates), "checked": checked, "added": len(accepted)}
 
 
 def fetch_channel_pages(
@@ -789,18 +1307,193 @@ def split_telegram_text(text: str, limit: int = 3900) -> list[str]:
     return chunks
 
 
-def send_telegram_message(token: str, chat_id: str, text: str) -> None:
+def send_telegram_message(token: str, chat_id: str, text: str, reply_markup: dict | None = None) -> None:
     api_url = f"https://api.telegram.org/bot{token}/sendMessage"
-    data = urllib.parse.urlencode(
-        {
-            "chat_id": chat_id,
-            "text": text,
-            "disable_web_page_preview": "true",
-        }
-    ).encode("utf-8")
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": "true",
+    }
+    if reply_markup:
+        payload["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
+    data = urllib.parse.urlencode(payload).encode("utf-8")
     request = urllib.request.Request(api_url, data=data, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=30) as response:
         response.read()
+
+
+def send_telegram_document(token: str, chat_id: str, file_path: Path, caption: str) -> None:
+    boundary = "----ClientWorkBoundary" + hashlib.sha1(str(file_path).encode("utf-8")).hexdigest()
+    body = bytearray()
+    fields = {"chat_id": chat_id, "caption": caption}
+    for name, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode("utf-8"))
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(
+        f'Content-Disposition: form-data; name="document"; filename="{file_path.name}"\r\n'
+        'Content-Type: text/csv\r\n\r\n'.encode("utf-8")
+    )
+    body.extend(file_path.read_bytes())
+    body.extend(f"\r\n--{boundary}--\r\n".encode())
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendDocument",
+        data=bytes(body),
+        headers={"User-Agent": USER_AGENT, "Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        response.read()
+
+
+def answer_callback_query(token: str, callback_query_id: str, text: str) -> None:
+    data = urllib.parse.urlencode({"callback_query_id": callback_query_id, "text": text}).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+        data=data,
+        headers={"User-Agent": USER_AGENT},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        response.read()
+
+
+def status_buttons(lead_id: str) -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "? ???????", "callback_data": f"lead:contacted:{lead_id}"},
+                {"text": "? ?? ???????", "callback_data": f"lead:not_contacted:{lead_id}"},
+            ],
+            [{"text": "? ?? ????????", "callback_data": f"lead:skipped:{lead_id}"}],
+        ]
+    }
+
+
+def telegram_credentials(config: dict) -> tuple[str, str]:
+    notify = config["notify"]
+    token = notify.get("telegram_bot_token", "").strip()
+    chat_id = notify.get("telegram_chat_id", "").strip()
+    if token and not chat_id:
+        chat_id = discover_telegram_chat_id(config)
+    return token, chat_id
+
+
+def daily_table_date(config: dict, now: datetime) -> datetime:
+    table_config = config.get("daily_table", {})
+    offset = int(table_config.get("timezone_offset_hours", 4))
+    return now.astimezone(timezone(timedelta(hours=offset)))
+
+
+def daily_table_stats(rows: list[dict[str, str]], day: str) -> dict[str, int]:
+    today_rows = [row for row in rows if row.get("found_at", "")[:10] == day]
+    return {
+        "found": len(today_rows),
+        "contacted": sum(1 for row in today_rows if row.get("contact_status") == "contacted"),
+        "not_contacted": sum(1 for row in today_rows if row.get("contact_status") == "not_contacted"),
+        "skipped": sum(1 for row in today_rows if row.get("contact_status") == "skipped"),
+        "answered": sum(1 for row in today_rows if row.get("client_answered") == "yes"),
+    }
+
+
+def build_daily_table(config: dict, now: datetime) -> tuple[Path, str]:
+    local_now = daily_table_date(config, now)
+    day = local_now.date().isoformat()
+    rows = [row for row in read_lead_rows() if row.get("found_at", "")[:10] == day]
+    file_path = ROOT / f"daily_leads_{day}.csv"
+    with file_path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=LEADS_FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(rows)
+    stats = daily_table_stats(rows, day)
+    caption = (
+        f"?? ???????? ?? {local_now.strftime('%d.%m.%Y')}\n\n"
+        f"???????: {stats['found']}\n"
+        f"???????: {stats['contacted']}\n"
+        f"?? ???????: {stats['not_contacted']}\n"
+        f"?? ????????: {stats['skipped']}"
+    )
+    return file_path, caption
+
+
+def send_daily_table(config: dict, now: datetime) -> None:
+    token, chat_id = telegram_credentials(config)
+    if not token or not chat_id:
+        return
+    file_path, caption = build_daily_table(config, now)
+    send_telegram_document(token, chat_id, file_path, caption)
+
+
+def maybe_send_daily_table(config: dict, state: dict, now: datetime) -> None:
+    table_config = config.get("daily_table", {})
+    if not table_config.get("enabled", True):
+        return
+    local_now = daily_table_date(config, now)
+    day = local_now.date().isoformat()
+    if state.get("last_daily_table_sent_date") == day:
+        return
+    send_time = str(table_config.get("send_time", "20:00"))
+    current_time = local_now.strftime("%H:%M")
+    if current_time >= send_time:
+        try:
+            send_daily_table(config, now)
+            state["last_daily_table_sent_date"] = day
+        except (RuntimeError, urllib.error.URLError, TimeoutError, OSError):
+            return
+
+
+def get_telegram_updates(config: dict, state: dict) -> list[dict]:
+    token, _ = telegram_credentials(config)
+    if not token:
+        return []
+    offset = int(state.get("telegram_update_offset", 0) or 0)
+    params = {"timeout": 0}
+    if offset:
+        params["offset"] = offset
+    url = f"https://api.telegram.org/bot{token}/getUpdates?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return payload.get("result", [])
+
+
+def process_telegram_updates(config: dict, state: dict, now: datetime) -> None:
+    token, chat_id = telegram_credentials(config)
+    if not token or not chat_id:
+        return
+    try:
+        updates = get_telegram_updates(config, state)
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+        return
+    max_update_id = int(state.get("telegram_update_offset", 0) or 0) - 1
+    for update in updates:
+        update_id = int(update.get("update_id", 0))
+        max_update_id = max(max_update_id, update_id)
+        callback = update.get("callback_query") or {}
+        message = update.get("message") or {}
+        if callback:
+            data = str(callback.get("data", ""))
+            match = re.fullmatch(r"lead:(contacted|not_contacted|skipped):([a-f0-9]{12})", data)
+            if match:
+                status, lead_id = match.groups()
+                changed = update_lead_status(lead_id, status, now)
+                text = {
+                    "contacted": "? ????????: ?? ???????? ???????",
+                    "not_contacted": "? ????????: ???? ?? ????????",
+                    "skipped": "? ????????: ?? ????????",
+                }[status]
+                try:
+                    answer_callback_query(token, callback.get("id", ""), text)
+                    if changed:
+                        send_telegram_message(token, chat_id, text)
+                except (urllib.error.URLError, TimeoutError, OSError):
+                    pass
+            continue
+        if str(message.get("text", "")).strip().lower() == "/table":
+            try:
+                send_daily_table(config, now)
+            except (RuntimeError, urllib.error.URLError, TimeoutError, OSError):
+                pass
+    if max_update_id >= 0:
+        state["telegram_update_offset"] = max_update_id + 1
 
 
 def save_config(config: dict) -> None:
@@ -828,48 +1521,43 @@ def discover_telegram_chat_id(config: dict) -> str:
 
 
 def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str]) -> None:
-    notify = config["notify"]
-    token = notify.get("telegram_bot_token", "").strip()
-    chat_id = notify.get("telegram_chat_id", "").strip()
-    if token and not chat_id:
-        chat_id = discover_telegram_chat_id(config)
+    token, chat_id = telegram_credentials(config)
     if not token or not chat_id:
         raise RuntimeError("Telegram notifications are not configured: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
-    if not leads and not notify.get("send_when_no_new_leads", False):
+    if not leads and not config["notify"].get("send_when_no_new_leads", False):
         return
 
     if not leads:
-        send_telegram_message(token, chat_id, "Новых лидов на Reels-монтаж нет.")
+        send_telegram_message(token, chat_id, "????? ????? ?? Reels-?????? ???.")
         return
 
-    header = (
-        f"Новых лидов на Reels-монтаж: {len(leads)}\n"
-        f"Таблица обновлена: {OUTPUT_FILE}\n\n"
-        "Ниже контакты и готовые сообщения для ответа с телефона."
-    )
-    send_telegram_message(token, chat_id, header)
+    send_telegram_message(token, chat_id, f"????? ????????: {len(leads)}")
 
-    for index, lead in enumerate(leads[:12], start=1):
+    for lead in leads[:12]:
+        if not lead.lead_id:
+            lead.lead_id = make_lead_id(lead.link)
         brief = make_vacancy_brief(config, lead.message, lead.budget)
         text = (
-            "🔥 Вакансия\n\n"
-            f"🎬 {brief.title}\n\n"
-            "📌 Кратко:\n"
-            f"• {brief.bullets[0]}\n"
-            f"• {brief.bullets[1]}\n"
-            f"• {brief.bullets[2]}\n\n"
-            f"💰 Бюджет: {brief.budget or 'не указан'}\n\n"
-            f"🔗 Ссылка: {lead.link}\n\n"
-            "💬 Готовый отклик:\n"
+            "?? ????????\n\n"
+            f"?? {brief.title}\n\n"
+            "?? ??????:\n"
+            f"? {brief.bullets[0]}\n"
+            f"? {brief.bullets[1]}\n"
+            f"? {brief.bullets[2]}\n\n"
+            f"?? ??????: {brief.budget or '?? ??????'}\n\n"
+            f"?? ??????: {lead.link}\n\n"
+            "?? ??????? ??????:\n"
             f"{lead.reply_draft}"
         )
-        for chunk in split_telegram_text(text):
-            send_telegram_message(token, chat_id, chunk)
+        chunks = split_telegram_text(text)
+        for index, chunk in enumerate(chunks):
+            reply_markup = status_buttons(lead.lead_id) if index == len(chunks) - 1 else None
+            send_telegram_message(token, chat_id, chunk, reply_markup=reply_markup)
 
     if len(leads) > 12:
-        send_telegram_message(token, chat_id, f"Еще {len(leads) - 12} лидов лежат в таблице: {OUTPUT_FILE}")
+        send_telegram_message(token, chat_id, f"??? {len(leads) - 12} ????? ????????? ? ???????.")
     if errors:
-        send_telegram_message(token, chat_id, "Ошибки по каналам:\n" + "\n".join(errors[:5]))
+        send_telegram_message(token, chat_id, "?????? ?? ???????:\n" + "\n".join(errors[:5]))
 
 
 def filter_reason_key(reason: str) -> str:
@@ -917,10 +1605,12 @@ def send_run_report(config: dict, report: dict) -> None:
 
 def main() -> int:
     config = load_config()
+    runtime_state = load_runtime_state()
     existing_links = read_existing_links()
     found_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     now_utc = datetime.now(timezone.utc)
-    max_post_age_hours = int(config.get("max_post_age_hours", 72))
+    max_post_age_hours = int(config.get("max_post_age_hours", 24))
+    max_leads_per_run = int(config.get("max_leads_per_run", 12))
     new_leads: list[Lead] = []
     errors: list[str] = []
     unavailable_channels: list[dict[str, str]] = []
@@ -938,7 +1628,11 @@ def main() -> int:
         "other": 0,
     }
 
-    channel_sources = load_channel_sources()
+    process_telegram_updates(config, runtime_state, now_utc)
+    discovery_report = run_source_discovery(config, now_utc)
+
+    all_channel_sources = load_channel_sources()
+    channel_sources = select_sources_for_run(all_channel_sources, runtime_state, config)
     channel_pages = fetch_channel_pages(
         channel_sources,
         timeout=int(config.get("channel_timeout_seconds", 20)),
@@ -971,20 +1665,28 @@ def main() -> int:
             continue
         channels_checked += 1
 
-        posts = parse_posts(page_html, channel)
+        posts = sorted(parse_posts(page_html, channel), key=post_message_id)
         posts_found += len(posts)
         for post in posts:
+            if is_duplicate_post(post, runtime_state, existing_links):
+                existing_posts += 1
+                update_last_message_id(runtime_state, post)
+                continue
             if not is_fresh_post(post["date"], max_post_age_hours, now_utc):
                 filtered_posts += 1
                 filter_reasons["other"] += 1
-                continue
-            if post["link"] in existing_links:
-                existing_posts += 1
+                update_last_message_id(runtime_state, post)
                 continue
             relevant, reason = is_relevant(post["text"], config)
             if not relevant:
                 filtered_posts += 1
                 filter_reasons[filter_reason_key(reason)] += 1
+                update_last_message_id(runtime_state, post)
+                continue
+            if len(new_leads) >= max_leads_per_run:
+                filtered_posts += 1
+                filter_reasons["other"] += 1
+                update_last_message_id(runtime_state, post)
                 continue
             score, status = score_post(post["text"])
             lead = Lead(
@@ -999,18 +1701,27 @@ def main() -> int:
                 reason=reason,
                 message=post["text"],
                 reply_draft=make_reply_draft(config, post["text"]),
+                lead_id=make_lead_id(post["link"]),
             )
             new_leads.append(lead)
             existing_links.add(post["link"])
-            try:
-                send_telegram_notification(config, [lead], [])
-                notification_status = "уведомление отправлено"
-            except (RuntimeError, urllib.error.URLError) as error:
-                notification_status = f"уведомление не отправлено: {error}"
 
     write_unavailable_channels(unavailable_channels)
     new_leads.sort(key=lambda lead: lead.score, reverse=True)
-    append_leads(new_leads)
+
+    if new_leads:
+        try:
+            send_telegram_notification(config, new_leads, [])
+            notification_status = "уведомление отправлено"
+            for lead in new_leads:
+                mark_lead_sent(runtime_state, lead)
+            append_leads(new_leads)
+        except (RuntimeError, urllib.error.URLError) as error:
+            notification_status = f"уведомление не отправлено: {error}"
+
+    runtime_state["last_checked_at"] = now_utc.isoformat(timespec="seconds")
+    maybe_send_daily_table(config, runtime_state, now_utc)
+    save_runtime_state(runtime_state)
 
     report = {
         "started_at": started_at,
@@ -1023,11 +1734,12 @@ def main() -> int:
         "errors": errors,
     }
 
-    try:
-        send_run_report(config, report)
-        notification_status = "отчёт отправлен"
-    except (RuntimeError, urllib.error.URLError) as error:
-        notification_status = f"отчёт не отправлен: {error}"
+    if config["notify"].get("send_run_report", False):
+        try:
+            send_run_report(config, report)
+            notification_status = "отчёт отправлен"
+        except (RuntimeError, urllib.error.URLError) as error:
+            notification_status = f"отчёт не отправлен: {error}"
 
     summary = [
         f"Запуск: {started_at}",
@@ -1041,6 +1753,8 @@ def main() -> int:
         f"- нет вакансии/заказа: {filter_reasons['no_vacancy']}",
         f"- стоп-слова: {filter_reasons['stop_words']}",
         f"Новых лидов: {len(new_leads)}",
+        f"Источников в запуске: {len(channel_sources)} из {len(all_channel_sources)}",
+        f"Discovery: {discovery_report['status']}, candidates={discovery_report['candidates']}, checked={discovery_report['checked']}, added={discovery_report['added']}",
         f"Таблица: {OUTPUT_FILE}",
         f"Уведомления: {notification_status}",
     ]

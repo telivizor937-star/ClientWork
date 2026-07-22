@@ -2,10 +2,12 @@ name: Reels lead agent
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
   schedule:
-    - cron: "0 9,10,12,15,18,21 * * *"
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: reels-lead-agent
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -13,14 +15,22 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run agent
         env:
@@ -36,10 +46,13 @@ jobs:
           PY
           python run_agent.py
 
-      - name: Save table
+      - name: Save runtime state
         run: |
           git config user.name "reels-lead-agent"
           git config user.email "actions@github.com"
-          git add leads.csv last_run.txt
-          git diff --cached --quiet || git commit -m "Update Reels leads"
+          git pull --rebase
+          git add runtime_state.json sources.json discovered_sources.csv leads.csv last_run.txt
+          if [ -f unavailable_channels.csv ]; then git add unavailable_channels.csv; fi
+          git add daily_leads_*.csv 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "chore: update bot runtime state"
           git push
