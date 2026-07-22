@@ -608,7 +608,7 @@ def clean_reply_draft(reply: str, config: dict) -> str:
         return ""
     portfolio_url = config["portfolio_url"]
     if portfolio_url not in reply:
-        reply = f"{reply.rstrip()}\n\n?????????: {portfolio_url}"
+        reply = f"{reply.rstrip()}\n\n\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {portfolio_url}"
     return "" if is_invalid_model_output(reply) else reply.strip()
 
 
@@ -664,10 +664,10 @@ def is_invalid_model_output(value: str, extra_forbidden: list[str] | None = None
 
 def make_fallback_reply(config: dict) -> str:
     return (
-        "????????????! ????????? ?????????? ??? ???? ????????. "
-        "?????? ?????????, ? ?????????? ?????? ? ????????? ? ???????. "
-        "????? ???????? ?????? ? ?????? ??????.\n\n"
-        f"?????????: {config['portfolio_url']}"
+        "\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435! \u0418\u043d\u0442\u0435\u0440\u0435\u0441\u043d\u0430 \u0440\u0430\u0431\u043e\u0442\u0430 \u0441 \u043c\u043e\u043d\u0442\u0430\u0436\u043e\u043c \u0432\u0438\u0434\u0435\u043e. "
+        "\u041c\u043e\u0433\u0443 \u0430\u043a\u043a\u0443\u0440\u0430\u0442\u043d\u043e \u0441\u043e\u0431\u0440\u0430\u0442\u044c \u0440\u043e\u043b\u0438\u043a \u043f\u043e \u0437\u0430\u0434\u0430\u0447\u0435 \u0438 \u043f\u0440\u0430\u0432\u043a\u0430\u043c. "
+        "\u0411\u0443\u0434\u0443 \u0440\u0430\u0434 \u043e\u0431\u0441\u0443\u0434\u0438\u0442\u044c \u0434\u0435\u0442\u0430\u043b\u0438.\n\n"
+        f"\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {config['portfolio_url']}"
     )
 
 
@@ -677,17 +677,17 @@ def make_vacancy_brief(config: dict, text: str, budget: str) -> VacancyBrief:
         return make_fallback_vacancy_brief(text, budget)
 
     system_prompt = (
-        "Ты делаешь краткую выжимку вакансии видеомонтажёра для Telegram.\n"
-        "Верни только готовый результат на русском языке.\n"
-        "Никаких рассуждений, объяснений, мыслей модели, инструкций или Markdown.\n"
-        "Не выводи полный текст вакансии.\n"
-        "Формат строго 5 строк:\n"
-        "Название: короткое название вакансии\n"
-        "Пункт 1: основной смысл\n"
-        "Пункт 2: основной смысл\n"
-        "Пункт 3: основной смысл\n"
-        "Бюджет: бюджет или не указан\n"
-        "Если невозможно составить нормальную выжимку, верни пустую строку."
+        "\u0422\u044b \u0434\u0435\u043b\u0430\u0435\u0448\u044c \u043a\u0440\u0430\u0442\u043a\u0443\u044e \u0432\u044b\u0436\u0438\u043c\u043a\u0443 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438 \u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440\u0430 \u0434\u043b\u044f Telegram.\n"
+        "\u0412\u0435\u0440\u043d\u0438 \u0442\u043e\u043b\u044c\u043a\u043e \u0433\u043e\u0442\u043e\u0432\u044b\u0439 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442 \u043d\u0430 \u0440\u0443\u0441\u0441\u043a\u043e\u043c \u044f\u0437\u044b\u043a\u0435.\n"
+        "\u041d\u0438\u043a\u0430\u043a\u0438\u0445 \u0440\u0430\u0441\u0441\u0443\u0436\u0434\u0435\u043d\u0438\u0439, \u043e\u0431\u044a\u044f\u0441\u043d\u0435\u043d\u0438\u0439, \u043c\u044b\u0441\u043b\u0435\u0439 \u043c\u043e\u0434\u0435\u043b\u0438, \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0439 \u0438\u043b\u0438 Markdown.\n"
+        "\u041d\u0435 \u0432\u044b\u0432\u043e\u0434\u0438 \u043f\u043e\u043b\u043d\u044b\u0439 \u0442\u0435\u043a\u0441\u0442 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438.\n"
+        "\u0424\u043e\u0440\u043c\u0430\u0442 \u0441\u0442\u0440\u043e\u0433\u043e 5 \u0441\u0442\u0440\u043e\u043a:\n"
+        "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435: \u043a\u043e\u0440\u043e\u0442\u043a\u043e\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438\n"
+        "\u041f\u0443\u043d\u043a\u0442 1: \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0441\u043c\u044b\u0441\u043b\n"
+        "\u041f\u0443\u043d\u043a\u0442 2: \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0441\u043c\u044b\u0441\u043b\n"
+        "\u041f\u0443\u043d\u043a\u0442 3: \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0441\u043c\u044b\u0441\u043b\n"
+        "\u0411\u044e\u0434\u0436\u0435\u0442: \u0431\u044e\u0434\u0436\u0435\u0442 \u0438\u043b\u0438 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\n"
+        "\u0415\u0441\u043b\u0438 \u043d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e \u0441\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u043d\u043e\u0440\u043c\u0430\u043b\u044c\u043d\u0443\u044e \u0432\u044b\u0436\u0438\u043c\u043a\u0443, \u0432\u0435\u0440\u043d\u0438 \u043f\u0443\u0441\u0442\u0443\u044e \u0441\u0442\u0440\u043e\u043a\u0443."
     )
     for model in OPENROUTER_MODELS:
         raw = request_openrouter_reply(api_key, model, system_prompt, text)
@@ -1375,10 +1375,10 @@ def status_buttons(lead_id: str) -> dict:
     return {
         "inline_keyboard": [
             [
-                {"text": "? ???????", "callback_data": f"lead:contacted:{lead_id}"},
-                {"text": "? ?? ???????", "callback_data": f"lead:not_contacted:{lead_id}"},
+                {"text": "\u2705 \u041e\u0442\u0432\u0435\u0442\u0438\u043b", "callback_data": f"lead:contacted:{lead_id}"},
+                {"text": "\u274c \u041d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b", "callback_data": f"lead:not_contacted:{lead_id}"},
             ],
-            [{"text": "? ?? ????????", "callback_data": f"lead:skipped:{lead_id}"}],
+            [{"text": "\u23ed \u041d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442", "callback_data": f"lead:skipped:{lead_id}"}],
         ]
     }
 
@@ -1420,11 +1420,11 @@ def build_daily_table(config: dict, now: datetime) -> tuple[Path, str]:
         writer.writerows(rows)
     stats = daily_table_stats(rows, day)
     caption = (
-        f"?? ???????? ?? {local_now.strftime('%d.%m.%Y')}\n\n"
-        f"???????: {stats['found']}\n"
-        f"???????: {stats['contacted']}\n"
-        f"?? ???????: {stats['not_contacted']}\n"
-        f"?? ????????: {stats['skipped']}"
+        f"\U0001f4ca \u041e\u0442\u0447\u0435\u0442 \u0437\u0430 {local_now.strftime('%d.%m.%Y')}\n\n"
+        f"\u041d\u0430\u0439\u0434\u0435\u043d\u043e: {stats['found']}\n"
+        f"\u041e\u0442\u0432\u0435\u0447\u0435\u043d\u043e: {stats['contacted']}\n"
+        f"\u041d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b\u0438: {stats['not_contacted']}\n"
+        f"\u041d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u044f\u0442: {stats['skipped']}"
     )
     return file_path, caption
 
@@ -1491,9 +1491,9 @@ def process_telegram_updates(config: dict, state: dict, now: datetime) -> None:
                 status, lead_id = match.groups()
                 changed = update_lead_status(lead_id, status, now)
                 text = {
-                    "contacted": "? ????????: ?? ???????? ???????",
-                    "not_contacted": "? ????????: ???? ?? ????????",
-                    "skipped": "? ????????: ?? ????????",
+                    "contacted": "\u2705 \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u043e\u0442\u043a\u043b\u0438\u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d",
+                    "not_contacted": "\u274c \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u043f\u043e\u043a\u0430 \u043d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b\u0438",
+                    "skipped": "\u23ed \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u043d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442",
                 }[status]
                 try:
                     answer_callback_query(token, callback.get("id", ""), text)
@@ -1543,25 +1543,25 @@ def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str
         return
 
     if not leads:
-        send_telegram_message(token, chat_id, "????? ????? ?? Reels-?????? ???.")
+        send_telegram_message(token, chat_id, "\u041d\u043e\u0432\u044b\u0445 \u043b\u0438\u0434\u043e\u0432 \u043f\u043e Reels-\u043c\u043e\u043d\u0442\u0430\u0436\u0443 \u043d\u0435\u0442.")
         return
 
-    send_telegram_message(token, chat_id, f"????? ????????: {len(leads)}")
+    send_telegram_message(token, chat_id, f"\u041d\u043e\u0432\u044b\u0445 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0439: {len(leads)}")
 
     for lead in leads[:12]:
         if not lead.lead_id:
             lead.lead_id = make_lead_id(lead.link)
         brief = make_vacancy_brief(config, lead.message, lead.budget)
         text = (
-            "?? ????????\n\n"
-            f"?? {brief.title}\n\n"
-            "?? ??????:\n"
-            f"? {brief.bullets[0]}\n"
-            f"? {brief.bullets[1]}\n"
-            f"? {brief.bullets[2]}\n\n"
-            f"?? ??????: {brief.budget or '?? ??????'}\n\n"
-            f"?? ??????: {lead.link}\n\n"
-            "?? ??????? ??????:\n"
+            "\U0001f525 \u0412\u0430\u043a\u0430\u043d\u0441\u0438\u044f\n\n"
+            f"\U0001f3ac {brief.title}\n\n"
+            "\U0001f4cc \u041a\u0440\u0430\u0442\u043a\u043e:\n"
+            f"\u2022 {brief.bullets[0]}\n"
+            f"\u2022 {brief.bullets[1]}\n"
+            f"\u2022 {brief.bullets[2]}\n\n"
+            f"\U0001f4b0 \u0411\u044e\u0434\u0436\u0435\u0442: {brief.budget or '\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d'}\n\n"
+            f"\U0001f517 \u0421\u0441\u044b\u043b\u043a\u0430: {lead.link}\n\n"
+            "\U0001f4ac \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043e\u0442\u043a\u043b\u0438\u043a:\n"
             f"{lead.reply_draft}"
         )
         chunks = split_telegram_text(text)
@@ -1570,9 +1570,9 @@ def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str
             send_telegram_message(token, chat_id, chunk, reply_markup=reply_markup)
 
     if len(leads) > 12:
-        send_telegram_message(token, chat_id, f"??? {len(leads) - 12} ????? ????????? ? ???????.")
+        send_telegram_message(token, chat_id, f"\u0415\u0449\u0435 {len(leads) - 12} \u043b\u0438\u0434\u043e\u0432 \u043e\u0441\u0442\u0430\u043b\u0438\u0441\u044c \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435.")
     if errors:
-        send_telegram_message(token, chat_id, "?????? ?? ???????:\n" + "\n".join(errors[:5]))
+        send_telegram_message(token, chat_id, "\u041e\u0448\u0438\u0431\u043a\u0438 \u043f\u043e \u043a\u0430\u043d\u0430\u043b\u0430\u043c:\n" + "\n".join(errors[:5]))
 
 
 def filter_reason_key(reason: str) -> str:
