@@ -29,6 +29,12 @@ USER_AGENT = (
     "Chrome/126.0 Safari/537.36"
 )
 
+OPENROUTER_MODELS = [
+    "google/gemma-3-27b-it:free",
+    "qwen/qwen3-235b-a22b:free",
+    "openrouter/free",
+]
+
 SHORT_VIDEO_KEYWORDS = [
     "рилс",
     "reels",
@@ -164,6 +170,13 @@ class Lead:
     reason: str
     message: str
     reply_draft: str
+
+
+@dataclass(frozen=True)
+class VacancyBrief:
+    title: str
+    bullets: list[str]
+    budget: str
 
 
 @dataclass(frozen=True)
@@ -523,17 +536,7 @@ def make_reply_draft(config: dict, text: str) -> str:
         "Первый символ ответа должен быть частью готового отклика.\n"
         "Если не можешь составить нормальный отклик, верни пустую строку."
     )
-    models = list(
-        dict.fromkeys(
-            [
-                str(config.get("openrouter_model") or "google/gemma-3-27b-it:free"),
-                "qwen/qwen3-235b-a22b:free",
-                "openrouter/free",
-            ]
-        )
-    )
-
-    for model in models:
+    for model in OPENROUTER_MODELS:
         reply = request_openrouter_reply(api_key, model, system_prompt, text)
         cleaned = clean_reply_draft(reply, config)
         if cleaned:
@@ -586,13 +589,32 @@ def clean_reply_draft(reply: str, config: dict) -> str:
         "по задаче вижу",
     ]
     reply = reply.strip()
-    normalized = reply.lower()
-    if not reply or any(phrase in normalized for phrase in forbidden):
+    if is_invalid_model_output(reply, forbidden):
         return ""
     portfolio_url = config["portfolio_url"]
     if portfolio_url not in reply:
         reply = f"{reply.rstrip()}\n\nПортфолио: {portfolio_url}"
     return reply.strip()
+
+
+def is_invalid_model_output(value: str, extra_forbidden: list[str] | None = None) -> bool:
+    forbidden = [
+        "we need",
+        "let's craft",
+        "i need",
+        "the user",
+        "нужно написать",
+        "рассуждение",
+        "рассуждения",
+        "анализ",
+        "план",
+        "инструкция",
+        "инструкции",
+    ]
+    if extra_forbidden:
+        forbidden.extend(extra_forbidden)
+    normalized = value.strip().lower()
+    return not normalized or any(phrase in normalized for phrase in forbidden)
 
 
 def make_fallback_reply(config: dict) -> str:
@@ -601,6 +623,67 @@ def make_fallback_reply(config: dict) -> str:
         "Сделаю аккуратно, с нормальным темпом и вниманием к деталям.\n\n"
         f"Портфолио: {config['portfolio_url']}\n\n"
         "Напишите, обсудим детали."
+    )
+
+
+def make_vacancy_brief(config: dict, text: str, budget: str) -> VacancyBrief:
+    api_key = str(config.get("openrouter_api_key", "")).strip()
+    if not api_key:
+        return make_fallback_vacancy_brief(text, budget)
+
+    system_prompt = (
+        "Ты делаешь краткую выжимку вакансии видеомонтажёра для Telegram.\n"
+        "Верни только готовый результат на русском языке.\n"
+        "Никаких рассуждений, объяснений, мыслей модели, инструкций или Markdown.\n"
+        "Не выводи полный текст вакансии.\n"
+        "Формат строго 5 строк:\n"
+        "Название: короткое название вакансии\n"
+        "Пункт 1: основной смысл\n"
+        "Пункт 2: основной смысл\n"
+        "Пункт 3: основной смысл\n"
+        "Бюджет: бюджет или не указан\n"
+        "Если невозможно составить нормальную выжимку, верни пустую строку."
+    )
+    for model in OPENROUTER_MODELS:
+        raw = request_openrouter_reply(api_key, model, system_prompt, text)
+        brief = clean_vacancy_brief(raw, text, budget)
+        if brief:
+            return brief
+    return make_fallback_vacancy_brief(text, budget)
+
+
+def clean_vacancy_brief(raw: str, text: str, budget: str) -> VacancyBrief | None:
+    if is_invalid_model_output(raw):
+        return None
+
+    values: dict[str, str] = {}
+    for line in raw.splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        values[key.strip().lower()] = value.strip(" -•\t")
+
+    title = values.get("название", "")
+    bullets = [
+        values.get("пункт 1", ""),
+        values.get("пункт 2", ""),
+        values.get("пункт 3", ""),
+    ]
+    summary_budget = values.get("бюджет", "") or budget or "не указан"
+    if not title or any(not item for item in bullets):
+        return None
+    return VacancyBrief(title=title[:80], bullets=[item[:120] for item in bullets], budget=summary_budget[:80])
+
+
+def make_fallback_vacancy_brief(text: str, budget: str) -> VacancyBrief:
+    return VacancyBrief(
+        title=make_title(text) or "Видеомонтажёр",
+        bullets=[
+            "Нужен монтаж коротких видео.",
+            "Важно аккуратно собрать ролик по задаче.",
+            "Детали лучше уточнить в переписке.",
+        ],
+        budget=budget or "не указан",
     )
 
 
@@ -767,14 +850,17 @@ def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str
     send_telegram_message(token, chat_id, header)
 
     for index, lead in enumerate(leads[:12], start=1):
+        brief = make_vacancy_brief(config, lead.message, lead.budget)
         text = (
-            f"Лид {index}/{len(leads)}\n"
-            f"Статус: {lead.status} | score {lead.score}\n"
-            f"Канал: {lead.channel}\n"
-            f"Пост/контакт: {lead.link}\n"
-            f"Бюджет: {lead.budget or 'не указан'}\n"
-            f"Заголовок: {lead.title}\n\n"
-            "Готовый отклик:\n"
+            "🔥 Вакансия\n\n"
+            f"🎬 {brief.title}\n\n"
+            "📌 Кратко:\n"
+            f"• {brief.bullets[0]}\n"
+            f"• {brief.bullets[1]}\n"
+            f"• {brief.bullets[2]}\n\n"
+            f"💰 Бюджет: {brief.budget or 'не указан'}\n\n"
+            f"🔗 Ссылка: {lead.link}\n\n"
+            "💬 Готовый отклик:\n"
             f"{lead.reply_draft}"
         )
         for chunk in split_telegram_text(text):
