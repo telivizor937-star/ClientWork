@@ -2,7 +2,7 @@
   "portfolio_url": "https://t.me/workinonlybusiness",
   "minimum_rub_per_video": 500,
   "max_post_age_hours": 72,
-  "openrouter_model": "openrouter/free",
+  "openrouter_model": "google/gemma-3-27b-it:free",
   "openrouter_api_key": "",
   "notify": {
     "telegram_bot_token": "",

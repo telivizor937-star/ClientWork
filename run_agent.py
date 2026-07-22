@@ -179,7 +179,7 @@ def load_config() -> dict:
         "max_post_age_hours": 72,
         "channel_fetch_workers": 20,
         "channel_timeout_seconds": 20,
-        "openrouter_model": "openrouter/free",
+        "openrouter_model": "google/gemma-3-27b-it:free",
         "openrouter_api_key": "",
         "notify": {
             "telegram_bot_token": "",
@@ -504,7 +504,7 @@ def make_reply_draft(config: dict, text: str) -> str:
     if not api_key:
         return make_fallback_reply(config)
 
-    prompt = (
+    system_prompt = (
         "Ты пишешь короткий отклик на вакансию видеомонтажёра.\n\n"
         "Пиши как обычный человек, а не как нейросеть.\n"
         "Не анализируй и не пересказывай вакансию.\n"
@@ -516,16 +516,41 @@ def make_reply_draft(config: dict, text: str) -> str:
         "короткий релевантный отклик;\n"
         f"портфолио: {config['portfolio_url']};\n"
         "предложение обсудить детали.\n\n"
-        "Верни только готовое сообщение.\n\n"
-        "Полный текст вакансии:\n"
-        f"{text}"
+        "Верни только готовый отклик на русском языке.\n"
+        "Не показывай рассуждения, инструкции, план или анализ.\n"
+        "Не используй английский язык.\n"
+        "Не используй Markdown.\n"
+        "Первый символ ответа должен быть частью готового отклика.\n"
+        "Если не можешь составить нормальный отклик, верни пустую строку."
     )
+    models = list(
+        dict.fromkeys(
+            [
+                str(config.get("openrouter_model") or "google/gemma-3-27b-it:free"),
+                "qwen/qwen3-235b-a22b:free",
+                "openrouter/free",
+            ]
+        )
+    )
+
+    for model in models:
+        reply = request_openrouter_reply(api_key, model, system_prompt, text)
+        cleaned = clean_reply_draft(reply, config)
+        if cleaned:
+            return cleaned
+    return make_fallback_reply(config)
+
+
+def request_openrouter_reply(api_key: str, model: str, system_prompt: str, vacancy_text: str) -> str:
     data = json.dumps(
         {
-            "model": config.get("openrouter_model", "openrouter/free"),
-            "messages": [{"role": "user", "content": prompt}],
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": vacancy_text},
+            ],
             "temperature": 0.8,
-            "max_tokens": 260,
+            "max_tokens": 220,
         },
         ensure_ascii=False,
     ).encode("utf-8")
@@ -540,27 +565,30 @@ def make_reply_draft(config: dict, text: str) -> str:
             "User-Agent": USER_AGENT,
         },
     )
-
     try:
         with urllib.request.urlopen(request, timeout=45) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        reply = payload["choices"][0]["message"]["content"].strip()
+        return payload["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError):
-        return make_fallback_reply(config)
-
-    return clean_reply_draft(reply, config)
+        return ""
 
 
 def clean_reply_draft(reply: str, config: dict) -> str:
     forbidden = [
+        "we need",
+        "let's craft",
+        "i need",
+        "the user",
+        "нужно написать",
         "прочитал вакансию",
         "понял, что нужен",
         "понял что нужен",
         "по задаче вижу",
     ]
+    reply = reply.strip()
     normalized = reply.lower()
     if not reply or any(phrase in normalized for phrase in forbidden):
-        return make_fallback_reply(config)
+        return ""
     portfolio_url = config["portfolio_url"]
     if portfolio_url not in reply:
         reply = f"{reply.rstrip()}\n\nПортфолио: {portfolio_url}"
