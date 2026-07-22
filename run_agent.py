@@ -11,7 +11,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -121,6 +121,35 @@ CANDIDATE_KEYWORDS = [
     "работаю с динамикой",
 ]
 
+IRRELEVANT_PRIMARY_ROLE_KEYWORDS = [
+    "поиск клиентов",
+    "лидогенерация",
+    "менеджер",
+    "smm",
+    "смм",
+    "таргетолог",
+    "дизайнер",
+    "копирайтер",
+    "продажи",
+    "продавать",
+    "продюсер",
+    "маркетолог",
+    "контент-менеджер",
+    "администратор",
+    "ассистент",
+    "помощник",
+]
+
+PRIMARY_MONTAGE_PATTERNS = [
+    r"\bvideo editor\b",
+    r"\bвидеомонтаж[её]р\w*\b",
+    r"\bмонтаж[её]р\w*\b",
+    r"\bредактор видео\b",
+    r"\bмонтаж\b.{0,80}\b(reels|shorts|tiktok|tik tok|видео|ролик)",
+    r"\b(reels|shorts|tiktok|tik tok|видео|ролик).{0,80}\bмонтаж\b",
+    r"\b(ищем|ищу|нужен|нужна|требуется)\b.{0,80}\bмонтаж",
+]
+
 
 @dataclass
 class Lead:
@@ -147,6 +176,7 @@ def load_config() -> dict:
     default = {
         "portfolio_url": "https://t.me/workinonlybusiness",
         "minimum_rub_per_video": 500,
+        "max_post_age_hours": 72,
         "channel_fetch_workers": 20,
         "channel_timeout_seconds": 20,
         "notify": {
@@ -339,6 +369,35 @@ def make_title(text: str) -> str:
     return first_line[:87].rstrip() + "..." if len(first_line) > 90 else first_line
 
 
+def parse_post_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def is_fresh_post(post_date: str, max_age_hours: int, now: datetime) -> bool:
+    parsed = parse_post_datetime(post_date)
+    if not parsed:
+        return False
+    return now - parsed <= timedelta(hours=max_age_hours)
+
+
+def has_primary_montage_role(text: str) -> bool:
+    lowered = text.lower()
+    return any(re.search(pattern, lowered, flags=re.I | re.S) for pattern in PRIMARY_MONTAGE_PATTERNS)
+
+
+def has_irrelevant_primary_role(text: str) -> bool:
+    lowered = text.lower()
+    return any(keyword in lowered for keyword in IRRELEVANT_PRIMARY_ROLE_KEYWORDS)
+
+
 def is_relevant(text: str, config: dict) -> tuple[bool, str]:
     lowered = text.lower()
     short_video = count_keywords(text, SHORT_VIDEO_KEYWORDS)
@@ -356,6 +415,10 @@ def is_relevant(text: str, config: dict) -> tuple[bool, str]:
         return False, "ниже минимальной оплаты"
     if montage < 1:
         return False, "нет монтажа"
+    if not has_primary_montage_role(text):
+        return False, "монтаж не является основной задачей"
+    if has_irrelevant_primary_role(text):
+        return False, "основная вакансия не про видеомонтаж"
     if vacancy < 1:
         return False, "нет признаков вакансии/заказа"
     if not video_context:
@@ -621,6 +684,8 @@ def main() -> int:
     config = load_config()
     existing_links = read_existing_links()
     found_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now_utc = datetime.now(timezone.utc)
+    max_post_age_hours = int(config.get("max_post_age_hours", 72))
     new_leads: list[Lead] = []
     errors: list[str] = []
     unavailable_channels: list[dict[str, str]] = []
@@ -674,6 +739,10 @@ def main() -> int:
         posts = parse_posts(page_html, channel)
         posts_found += len(posts)
         for post in posts:
+            if not is_fresh_post(post["date"], max_post_age_hours, now_utc):
+                filtered_posts += 1
+                filter_reasons["other"] += 1
+                continue
             if post["link"] in existing_links:
                 existing_posts += 1
                 continue

@@ -1,6 +1,7 @@
 {
   "portfolio_url": "https://t.me/workinonlybusiness",
   "minimum_rub_per_video": 500,
+  "max_post_age_hours": 72,
   "notify": {
     "telegram_bot_token": "",
     "telegram_chat_id": "",
