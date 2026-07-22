@@ -444,15 +444,83 @@ def score_post(text: str) -> tuple[int, str]:
     return score, status
 
 
-def make_reply_draft(config: dict) -> str:
-    return (
-        "Здравствуйте! Готов взять монтаж Reels/Shorts/TikTok.\n\n"
-        "Делаю динамичный монтаж, субтитры, акценты, темп и упаковку под удержание. "
-        "Особенно хорошо захожу в экспертные рилсы.\n\n"
-        f"Портфолио: {config['portfolio_url']}\n\n"
-        "Могу сделать платный тестовый ролик, чтобы вы сразу увидели уровень. "
-        "Куда удобнее прислать ТЗ?"
+def detect_niche(text: str) -> str:
+    lowered = text.lower()
+    niches = [
+        ("эксперт", ["эксперт", "обуч", "курс", "настав", "психолог", "коуч"]),
+        ("блог", ["блог", "личный бренд", "инфлюенсер", "автор"]),
+        ("товарный проект", ["товар", "магазин", "бренд", "маркетплейс", "wildberries", "ozon"]),
+        ("услуги", ["услуг", "салон", "клиник", "недвиж", "юрист", "стомат"]),
+        ("YouTube/подкаст", ["youtube", "ютуб", "подкаст", "интервью"]),
+    ]
+    for niche, keywords in niches:
+        if any(keyword in lowered for keyword in keywords):
+            return niche
+    return "проект"
+
+
+def detect_content_type(text: str) -> str:
+    lowered = text.lower()
+    formats = [
+        ("Reels", ["reels", "рилс", "рилсы"]),
+        ("Shorts", ["shorts", "шортс"]),
+        ("TikTok", ["tiktok", "tik tok", "тикток", "тик ток"]),
+        ("короткие видео", ["короткие видео", "ролики", "видео"]),
+    ]
+    found = [name for name, keywords in formats if any(keyword in lowered for keyword in keywords)]
+    return "/".join(dict.fromkeys(found[:3])) if found else "видео"
+
+
+def detect_requirements(text: str) -> list[str]:
+    lowered = text.lower()
+    checks = [
+        ("субтитры", ["субтитр"]),
+        ("динамика", ["динамич", "темп"]),
+        ("хуки", ["хук", "удержан"]),
+        ("цвет/звук", ["цвет", "звук"]),
+        ("CapCut", ["capcut"]),
+        ("Premiere Pro", ["premiere", "премьер"]),
+        ("After Effects", ["after effects", "афт"]),
+        ("обложки", ["облож"]),
+    ]
+    return [name for name, keywords in checks if any(keyword in lowered for keyword in keywords)][:4]
+
+
+def extract_project_feature(text: str) -> str:
+    lines = [line.strip(" -•\t") for line in text.splitlines() if line.strip()]
+    for line in lines:
+        lowered = line.lower()
+        if any(keyword in lowered for keyword in ["нужно", "задача", "треб", "ищем", "нужен", "нужна"]):
+            return line[:120]
+    return make_title(text)
+
+
+def make_reply_draft(config: dict, text: str) -> str:
+    niche = detect_niche(text)
+    content_type = detect_content_type(text)
+    requirements = detect_requirements(text)
+    budget = extract_budget(text)
+    feature = extract_project_feature(text)
+
+    lines = [
+        "Здравствуйте! Прочитал вакансию.",
+        f"Понял, что нужен монтаж для {niche}: {content_type}.",
+    ]
+    if feature:
+        lines.append(f"По задаче вижу главное: {feature}")
+    if requirements:
+        lines.append(f"Могу закрыть по монтажу: {', '.join(requirements)}.")
+    else:
+        lines.append("Могу взять монтаж, собрать ролик по структуре, темпу и удержанию.")
+    if budget:
+        lines.append(f"Бюджет увидел: {budget}.")
+    lines.extend(
+        [
+            f"Портфолио: {config['portfolio_url']}",
+            "Если формат подходит, пришлите ТЗ и пример роликов, на которые ориентироваться.",
+        ]
     )
+    return "\n\n".join(lines)
 
 
 def read_existing_links() -> set[str]:
@@ -763,7 +831,7 @@ def main() -> int:
                 link=post["link"],
                 reason=reason,
                 message=post["text"],
-                reply_draft=make_reply_draft(config),
+                reply_draft=make_reply_draft(config, post["text"]),
             )
             new_leads.append(lead)
             existing_links.add(post["link"])
