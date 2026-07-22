@@ -620,16 +620,26 @@ def is_invalid_model_output(value: str, extra_forbidden: list[str] | None = None
         "let's craft",
         "i need",
         "the user",
-        "????? ????????",
-        "??????? ??????",
+        "\u043d\u0443\u0436\u043d\u043e \u043d\u0430\u043f\u0438\u0441\u0430\u0442\u044c",
+        "\u0433\u043e\u0442\u043e\u0432\u044b\u0439 \u043e\u0442\u043a\u043b\u0438\u043a",
         "reasoning",
         "analysis",
-        "???????????",
-        "???????????",
-        "??????",
-        "????",
-        "??????????",
-        "??????????",
+        "\u0440\u0430\u0441\u0441\u0443\u0436\u0434\u0435\u043d\u0438\u0435",
+        "\u0440\u0430\u0441\u0441\u0443\u0436\u0434\u0435\u043d\u0438\u044f",
+        "\u0430\u043d\u0430\u043b\u0438\u0437",
+        "\u043f\u043b\u0430\u043d",
+        "\u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044f",
+        "\u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0438",
+    ]
+    human_markers = [
+        "\u0437\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435",
+        "\u0434\u043e\u0431\u0440\u044b\u0439",
+        "\u043f\u0440\u0438\u0432\u0435\u0442",
+        "\u0433\u043e\u0442\u043e\u0432",
+        "\u043c\u043e\u0433\u0443",
+        "\u0441\u0434\u0435\u043b\u0430\u044e",
+        "\u0438\u043d\u0442\u0435\u0440\u0435\u0441\u043d",
+        "\u043e\u0431\u0441\u0443\u0434",
     ]
     if extra_forbidden:
         forbidden.extend(extra_forbidden)
@@ -646,7 +656,7 @@ def is_invalid_model_output(value: str, extra_forbidden: list[str] | None = None
         return True
     if not re.search(r"[.!?]\s|[.!?]$", value):
         return True
-    if not re.search(r"(????????????|??????|??????|?????|????|??????|????????|?????)", normalized):
+    if not any(marker in normalized for marker in human_markers):
         return True
     return False
 
