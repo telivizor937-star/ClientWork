@@ -1156,7 +1156,8 @@ def verify_discovered_source(username: str, max_age_days: int, timeout: int = 15
 
     now = datetime.now(timezone.utc)
     posts = parse_posts(page_html, channel_url)
-    latest_post = max((parse_post_datetime(post["date"]) for post in posts), default=None)
+    post_dates = [parse_post_datetime(post["date"]) for post in posts]
+    latest_post = max((date for date in post_dates if date is not None), default=None)
     if latest_post is None or now - latest_post > timedelta(days=max_age_days):
         return False, "no_recent_posts"
 
@@ -1240,7 +1241,10 @@ def run_source_discovery(config: dict, now: datetime) -> dict[str, int | str]:
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(verify, name) for name in pending]
         for future in as_completed(futures):
-            username, ok, reason = future.result()
+            try:
+                username, ok, reason = future.result()
+            except Exception as error:
+                username, ok, reason = "unknown", False, f"verify_error: {error}"
             checked += 1
             status = "accepted" if ok and len(accepted) < max_new else "rejected"
             if ok and len(accepted) < max_new:
