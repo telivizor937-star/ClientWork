@@ -596,8 +596,9 @@ def request_openrouter_reply(api_key: str, model: str, system_prompt: str, vacan
     try:
         with urllib.request.urlopen(request, timeout=45) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        return payload["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError):
+        content = payload["choices"][0]["message"].get("content") or ""
+        return str(content).strip()
+    except (KeyError, IndexError, AttributeError, json.JSONDecodeError, urllib.error.URLError, TimeoutError, OSError):
         return ""
 
 
