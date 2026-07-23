@@ -440,6 +440,80 @@ def has_irrelevant_primary_role(text: str) -> bool:
     return any(keyword in lowered for keyword in IRRELEVANT_PRIMARY_ROLE_KEYWORDS)
 
 
+def contains_any(text: str, keywords: list[str]) -> bool:
+    lowered = text.lower()
+    return any(keyword in lowered for keyword in keywords)
+
+
+def is_ad_or_repost(text: str) -> bool:
+    lowered = text.lower()
+    markers = [
+        "\u0440\u0435\u043a\u043b\u0430\u043c\u0430",
+        "\u0440\u0435\u043a\u043b\u0430\u043c\u043d\u044b\u0439 \u043f\u043e\u0441\u0442",
+        "\u043f\u043e\u0434\u043f\u0438\u0448\u0438",
+        "\u043f\u043e\u0434\u043f\u0438\u0441\u044b\u0432\u0430\u0439",
+        "\u043d\u0430\u0448 \u043a\u0430\u043d\u0430\u043b",
+        "\u043d\u0430\u0448\u0435\u0433\u043e \u0431\u043e\u0442\u0430",
+        "\u0438\u0437 \u043d\u0430\u0448\u0435\u0433\u043e \u0431\u043e\u0442\u0430",
+        "\u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f \u0432\u0437\u044f\u0442\u0430",
+        "\u0432\u0437\u044f\u0442\u0430 \u0438\u0437",
+        "\u0431\u043e\u0442 \u0441 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f\u043c\u0438",
+        "\u043a\u0443\u0440\u0441 \u043f\u043e",
+        "\u043e\u0431\u0443\u0447\u0435\u043d\u0438\u0435 \u043c\u043e\u043d\u0442\u0430\u0436\u0443",
+        "\u043d\u0430\u0443\u0447\u0443 \u043c\u043e\u043d\u0442\u0430\u0436\u0443",
+        "\u0443\u0441\u043b\u0443\u0433\u0438 \u043c\u043e\u043d\u0442\u0430\u0436\u0430",
+        "\u043f\u0440\u043e\u0434\u0430\u044e \u0443\u0441\u043b\u0443\u0433\u0438",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
+def is_candidate_offer(text: str) -> bool:
+    lowered = text.lower()
+    markers = [
+        "\u0438\u0449\u0443 \u0440\u0430\u0431\u043e\u0442\u0443",
+        "\u0438\u0449\u0443 \u0437\u0430\u043a\u0430\u0437",
+        "\u0432\u043e\u0437\u044c\u043c\u0443 \u0437\u0430\u043a\u0430\u0437",
+        "\u0433\u043e\u0442\u043e\u0432 \u0432\u0437\u044f\u0442\u044c",
+        "\u0433\u043e\u0442\u043e\u0432\u0430 \u0432\u0437\u044f\u0442\u044c",
+        "\u044f \u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440",
+        "\u044f \u043c\u043e\u043d\u0442\u0430\u0436\u0451\u0440",
+        "\u044f \u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440",
+        "\u044f \u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436\u0451\u0440",
+        "\u043c\u043e\u0438 \u0440\u0430\u0431\u043e\u0442\u044b",
+        "\u043c\u043e\u0435 \u043f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e",
+        "\u043c\u043e\u0451 \u043f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e",
+        "#\u043f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
+def has_real_montage_request(text: str) -> bool:
+    request_markers = [
+        "\u0438\u0449\u0443",
+        "\u0438\u0449\u0435\u043c",
+        "\u043d\u0443\u0436\u0435\u043d",
+        "\u043d\u0443\u0436\u043d\u0430",
+        "\u043d\u0443\u0436\u043d\u044b",
+        "\u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f",
+        "\u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f",
+        "\u0437\u0430\u0434\u0430\u0447\u0430",
+        "\u043e\u0431\u044f\u0437\u0430\u043d\u043d\u043e\u0441\u0442\u0438",
+        "\u043e\u043f\u043b\u0430\u0442\u0430",
+        "\u0431\u044e\u0434\u0436\u0435\u0442",
+    ]
+    montage_markers = [
+        "\u043c\u043e\u043d\u0442\u0430\u0436",
+        "\u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440",
+        "\u043c\u043e\u043d\u0442\u0430\u0436\u0451\u0440",
+        "\u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436",
+        "video editor",
+        "reels",
+        "shorts",
+        "tiktok",
+    ]
+    return contains_any(text, request_markers) and contains_any(text, montage_markers)
+
+
 def is_relevant(text: str, config: dict) -> tuple[bool, str]:
     lowered = text.lower()
     short_video = count_keywords(text, SHORT_VIDEO_KEYWORDS)
@@ -447,25 +521,31 @@ def is_relevant(text: str, config: dict) -> tuple[bool, str]:
     vacancy = count_keywords(text, VACANCY_KEYWORDS)
     negative = count_keywords(text, NEGATIVE_KEYWORDS)
     candidate = count_keywords(text, CANDIDATE_KEYWORDS)
-    video_context = short_video > 0 or "видео" in lowered or "video" in lowered
+    video_context = short_video > 0 or "\u0432\u0438\u0434\u0435\u043e" in lowered or "video" in lowered
 
+    if is_ad_or_repost(text):
+        return False, "\u0440\u0435\u043a\u043b\u0430\u043c\u0430/\u043f\u0435\u0440\u0435\u043f\u0435\u0447\u0430\u0442\u043a\u0430"
+    if is_candidate_offer(text):
+        return False, "\u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u0438\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044f"
+    if not has_real_montage_request(text):
+        return False, "\u043d\u0435\u0442 \u0440\u0435\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u0437\u0430\u043f\u0440\u043e\u0441\u0430 \u043d\u0430 \u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436"
     if candidate:
-        return False, "похоже на резюме исполнителя"
+        return False, "\u043f\u043e\u0445\u043e\u0436\u0435 \u043d\u0430 \u0440\u0435\u0437\u044e\u043c\u0435 \u0438\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044f"
     if negative:
-        return False, "есть стоп-слова: офис/выезд/smm/без оплаты/длинные видео"
+        return False, "\u0435\u0441\u0442\u044c \u0441\u0442\u043e\u043f-\u0441\u043b\u043e\u0432\u0430: \u043e\u0444\u0438\u0441/\u0432\u044b\u0435\u0437\u0434/smm/\u0431\u0435\u0437 \u043e\u043f\u043b\u0430\u0442\u044b/\u0434\u043b\u0438\u043d\u043d\u044b\u0435 \u0432\u0438\u0434\u0435\u043e"
     if not has_minimum_budget(text, int(config["minimum_rub_per_video"])):
-        return False, "ниже минимальной оплаты"
+        return False, "\u043d\u0438\u0436\u0435 \u043c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u043e\u0439 \u043e\u043f\u043b\u0430\u0442\u044b"
     if montage < 1:
-        return False, "нет монтажа"
+        return False, "\u043d\u0435\u0442 \u043c\u043e\u043d\u0442\u0430\u0436\u0430"
     if not has_primary_montage_role(text):
-        return False, "монтаж не является основной задачей"
+        return False, "\u043c\u043e\u043d\u0442\u0430\u0436 \u043d\u0435 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0437\u0430\u0434\u0430\u0447\u0435\u0439"
     if has_irrelevant_primary_role(text):
-        return False, "основная вакансия не про видеомонтаж"
+        return False, "\u043e\u0441\u043d\u043e\u0432\u043d\u0430\u044f \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f \u043d\u0435 \u043f\u0440\u043e \u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436"
     if vacancy < 1:
-        return False, "нет признаков вакансии/заказа"
+        return False, "\u043d\u0435\u0442 \u043f\u0440\u0438\u0437\u043d\u0430\u043a\u043e\u0432 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438/\u0437\u0430\u043a\u0430\u0437\u0430"
     if not video_context:
-        return False, "нет Reels/Shorts/TikTok"
-    return True, "видео + монтаж + вакансия"
+        return False, "\u043d\u0435\u0442 Reels/Shorts/TikTok"
+    return True, "\u0432\u0438\u0434\u0435\u043e + \u043c\u043e\u043d\u0442\u0430\u0436 + \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f"
 
 
 def score_post(text: str) -> tuple[int, str]:
@@ -476,13 +556,17 @@ def score_post(text: str) -> tuple[int, str]:
     score += count_keywords(text, GOOD_FORMAT_KEYWORDS) * 2
     if extract_budget(text):
         score += 2
+    if contains_any(text, ["@", "t.me/", "\u043f\u0438\u0448\u0438\u0442\u0435", "\u0441\u0432\u044f\u0437\u044c", "\u043b\u0441", "\u0434\u0438\u0440\u0435\u043a\u0442"]):
+        score += 2
+    if contains_any(text, ["\u0441\u0440\u043e\u043a", "\u0434\u0435\u0434\u043b\u0430\u0439\u043d", "\u0441\u0435\u0433\u043e\u0434\u043d\u044f", "\u0437\u0430\u0432\u0442\u0440\u0430"]):
+        score += 2
 
-    if score >= 12:
-        status = "горячий"
-    elif score >= 7:
-        status = "норм"
+    if score >= 14:
+        status = "\u0432\u044b\u0441\u043e\u043a\u0430\u044f"
+    elif score >= 9:
+        status = "\u0441\u0440\u0435\u0434\u043d\u044f\u044f"
     else:
-        status = "слабый"
+        status = "\u043d\u0438\u0437\u043a\u0430\u044f"
     return score, status
 
 
@@ -1676,6 +1760,7 @@ def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str
             f"\u2022 {brief.bullets[1]}\n"
             f"\u2022 {brief.bullets[2]}\n\n"
             f"\U0001f4b0 \u0411\u044e\u0434\u0436\u0435\u0442: {brief.budget or '\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d'}\n\n"
+            f"\u2b50 \u0420\u0435\u043b\u0435\u0432\u0430\u043d\u0442\u043d\u043e\u0441\u0442\u044c: {lead.status}\n\n"
             f"\U0001f517 \u0421\u0441\u044b\u043b\u043a\u0430: {lead.link}\n\n"
             "\U0001f4ac \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043e\u0442\u043a\u043b\u0438\u043a:\n"
             f"{lead.reply_draft}"
@@ -1743,6 +1828,7 @@ def main() -> int:
     max_post_age_hours = int(config.get("max_post_age_hours", 24))
     max_leads_per_run = int(config.get("max_leads_per_run", 12))
     new_leads: list[Lead] = []
+    current_run_fingerprints: list[str] = []
     errors: list[str] = []
     unavailable_channels: list[dict[str, str]] = []
     notification_status = "уведомлений не было"
@@ -1814,6 +1900,11 @@ def main() -> int:
                 filter_reasons[filter_reason_key(reason)] += 1
                 update_last_message_id(runtime_state, post)
                 continue
+            fingerprint = text_fingerprint(post["text"])
+            if is_near_duplicate_text(fingerprint, current_run_fingerprints):
+                existing_posts += 1
+                update_last_message_id(runtime_state, post)
+                continue
             if len(new_leads) >= max_leads_per_run:
                 filtered_posts += 1
                 filter_reasons["other"] += 1
@@ -1835,6 +1926,7 @@ def main() -> int:
                 lead_id=make_lead_id(post["link"]),
             )
             new_leads.append(lead)
+            current_run_fingerprints.append(fingerprint)
             existing_links.add(post["link"])
 
     write_unavailable_channels(unavailable_channels)
