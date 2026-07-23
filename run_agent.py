@@ -686,6 +686,36 @@ def reply_fact_snippets(text: str, budget: str = "") -> list[str]:
     return facts[:5]
 
 
+def natural_reply_detail(text: str) -> str:
+    facts = reply_fact_snippets(text, extract_budget(text))
+    formats = [fact for fact in facts if fact in {"Reels", "Shorts", "TikTok", "YouTube", "\u0438\u043d\u0442\u0435\u0440\u0432\u044c\u044e", "\u043f\u043e\u0434\u043a\u0430\u0441\u0442", "\u0440\u0435\u043a\u043b\u0430\u043c\u043d\u044b\u0435 \u043a\u0440\u0435\u0430\u0442\u0438\u0432\u044b"}]
+    requirements = [fact for fact in facts if fact in {"\u0441\u0443\u0431\u0442\u0438\u0442\u0440\u044b", "\u0434\u0438\u043d\u0430\u043c\u0438\u0447\u043d\u044b\u0439 \u043c\u043e\u043d\u0442\u0430\u0436", "\u0433\u0440\u0430\u0444\u0438\u0447\u0435\u0441\u043a\u0438\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b"}]
+    volume = "\u0440\u0435\u0433\u0443\u043b\u044f\u0440\u043d\u044b\u0439 \u043e\u0431\u044a\u0435\u043c" in facts
+    budget = next((fact.split(": ", 1)[1] for fact in facts if fact.startswith("\u0431\u044e\u0434\u0436\u0435\u0442: ")), "")
+
+    def join_human(items: list[str]) -> str:
+        if len(items) <= 1:
+            return "".join(items)
+        return " \u0438 ".join([", ".join(items[:-1]), items[-1]]).strip()
+
+    parts: list[str] = []
+    if formats:
+        parts.append("\u0433\u043e\u0442\u043e\u0432 \u0432\u0437\u044f\u0442\u044c\u0441\u044f \u0437\u0430 \u043c\u043e\u043d\u0442\u0430\u0436 \u043f\u043e\u0434 " + "/".join(formats[:3]))
+    else:
+        parts.append("\u0433\u043e\u0442\u043e\u0432 \u0432\u0437\u044f\u0442\u044c\u0441\u044f \u0437\u0430 \u043c\u043e\u043d\u0442\u0430\u0436")
+    if requirements:
+        parts.append("\u0443\u0447\u0442\u0443 " + join_human(requirements[:3]))
+    if volume:
+        parts.append("\u043f\u043b\u0430\u043d\u0438\u0440\u0443\u0435\u043c\u044b\u0439 \u043e\u0431\u044a\u0435\u043c \u0443\u0447\u0442\u0443")
+    if budget:
+        parts.append(f"\u043f\u043e \u043e\u043f\u043b\u0430\u0442\u0435 \u0432\u0438\u0436\u0443 {budget}")
+    return ". ".join(sentence_start(part) for part in parts)
+
+
+def sentence_start(value: str) -> str:
+    return value[:1].upper() + value[1:] if value else value
+
+
 def make_reply_draft(config: dict, text: str) -> str:
     api_key = str(config.get("openrouter_api_key", "")).strip()
     if not api_key:
@@ -697,6 +727,7 @@ def make_reply_draft(config: dict, text: str) -> str:
         "\u0422\u044b \u043f\u0438\u0448\u0435\u0448\u044c \u043a\u043e\u0440\u043e\u0442\u043a\u0438\u0439 \u043e\u0442\u043a\u043b\u0438\u043a \u043d\u0430 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044e \u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440\u0430.\n\n"
         "\u041f\u0438\u0448\u0438 \u043a\u0430\u043a \u043e\u0431\u044b\u0447\u043d\u044b\u0439 \u0447\u0435\u043b\u043e\u0432\u0435\u043a, \u0430 \u043d\u0435 \u043a\u0430\u043a \u043d\u0435\u0439\u0440\u043e\u0441\u0435\u0442\u044c.\n"
         "\u041d\u0435 \u043f\u043e\u0432\u0442\u043e\u0440\u044f\u0439 \u043e\u0434\u043d\u0443 \u0438 \u0442\u0443 \u0436\u0435 \u0444\u0440\u0430\u0437\u0443 \u0432 \u0440\u0430\u0437\u043d\u044b\u0445 \u043e\u0442\u043a\u043b\u0438\u043a\u0430\u0445.\n"
+        "\u041d\u0435 \u043f\u0438\u0448\u0438 \u0441\u0443\u0445\u0438\u0435 \u0441\u043f\u0438\u0441\u043a\u0438 \u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0445 \u0441\u043b\u043e\u0432 \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043f\u044f\u0442\u0443\u044e.\n"
         f"\u0412\u0430\u0440\u0438\u0430\u043d\u0442 \u043f\u043e\u0432\u0435\u0434\u0435\u043d\u0438\u044f: {reply_behavior_variant(text)}.\n"
         f"\u0424\u0430\u043a\u0442\u044b, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043c\u043e\u0436\u043d\u043e \u0443\u043f\u043e\u043c\u044f\u043d\u0443\u0442\u044c: {facts_text}.\n"
         "\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439 \u0442\u043e\u043b\u044c\u043a\u043e \u0442\u0435 \u0434\u0435\u0442\u0430\u043b\u0438, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043f\u0440\u044f\u043c\u043e \u0435\u0441\u0442\u044c \u0432 \u0442\u0435\u043a\u0441\u0442\u0435 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438.\n"
@@ -705,7 +736,7 @@ def make_reply_draft(config: dict, text: str) -> str:
         "\u0415\u0441\u043b\u0438 \u0434\u0435\u0442\u0430\u043b\u0435\u0439 \u043c\u0430\u043b\u043e, \u043d\u0430\u043f\u0438\u0448\u0438 \u043a\u043e\u0440\u043e\u0442\u043a\u043e \u0438 \u043d\u0435\u0439\u0442\u0440\u0430\u043b\u044c\u043d\u043e, \u0431\u0435\u0437 \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u0438\u043a\u0438 \u043e\u0442 \u0441\u0435\u0431\u044f.\n"
         "\u041d\u0435 \u0430\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0439 \u0438 \u043d\u0435 \u043f\u0435\u0440\u0435\u0441\u043a\u0430\u0437\u044b\u0432\u0430\u0439 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044e.\n"
         "\u041d\u0435 \u0443\u043f\u043e\u043c\u0438\u043d\u0430\u0439 \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u044b \u043c\u043e\u043d\u0442\u0430\u0436\u0430, \u0435\u0441\u043b\u0438 \u044d\u0442\u043e \u043d\u0435 \u0441\u043a\u0430\u0437\u0430\u043d\u043e \u0432 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438.\n"
-        "\u0414\u043b\u0438\u043d\u0430: 2-5 \u043a\u043e\u0440\u043e\u0442\u043a\u0438\u0445 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0439.\n"
+        "\u0414\u043b\u0438\u043d\u0430: 3-5 \u043a\u043e\u0440\u043e\u0442\u043a\u0438\u0445 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0439.\n"
         "\u0418\u043d\u043e\u0433\u0434\u0430 \u043d\u0430\u0447\u0438\u043d\u0430\u0439 \u0441 \u043f\u0440\u0438\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u044f, \u0438\u043d\u043e\u0433\u0434\u0430 \u0441\u0440\u0430\u0437\u0443 \u0441 \u0441\u0443\u0442\u0438.\n"
         "\u041c\u043e\u0436\u043d\u043e \u0437\u0430\u0434\u0430\u0442\u044c \u0440\u043e\u0432\u043d\u043e \u043e\u0434\u0438\u043d \u0443\u043c\u0435\u0441\u0442\u043d\u044b\u0439 \u0432\u043e\u043f\u0440\u043e\u0441, \u0435\u0441\u043b\u0438 \u0432 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438 \u043d\u0435 \u0445\u0432\u0430\u0442\u0430\u0435\u0442 \u0432\u0430\u0436\u043d\u043e\u0439 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u0438.\n"
         f"\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e \u0432\u0441\u0435\u0433\u0434\u0430 \u0432 \u0441\u0430\u043c\u043e\u043c \u043a\u043e\u043d\u0446\u0435: \u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {config['portfolio_url']}.\n\n"
@@ -839,23 +870,22 @@ def is_invalid_model_output(
 
 def make_fallback_reply(config: dict, vacancy_text: str = "") -> str:
     portfolio = config["portfolio_url"]
-    facts = reply_fact_snippets(vacancy_text, extract_budget(vacancy_text))
     variant = int(hashlib.sha1(vacancy_text.encode("utf-8", errors="ignore")).hexdigest()[:8], 16) % 5
-    fact_text = ", ".join(facts[:2])
     has_budget = bool(extract_budget(vacancy_text))
     has_volume = contains_any(vacancy_text, ["\u043e\u0431\u044a\u0435\u043c", "\u043e\u0431\u044a\u0451\u043c", "\u0432 \u0434\u0435\u043d\u044c", "\u0435\u0436\u0435\u0434\u043d"])
+    detail = natural_reply_detail(vacancy_text)
 
-    if facts and variant == 0:
-        body = f"\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435! \u0418\u043d\u0442\u0435\u0440\u0435\u0441\u043d\u0430 \u0437\u0430\u0434\u0430\u0447\u0430: {fact_text}. \u0413\u043e\u0442\u043e\u0432 \u043e\u0431\u0441\u0443\u0434\u0438\u0442\u044c \u0434\u0435\u0442\u0430\u043b\u0438."
-    elif facts and variant == 1:
-        body = f"\u0418\u043d\u0442\u0435\u0440\u0435\u0441\u0435\u043d {fact_text}. \u0415\u0441\u043b\u0438 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u043e, \u043d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u0438 \u043e\u0431\u0441\u0443\u0434\u0438\u043c \u0437\u0430\u0434\u0430\u0447\u0443."
-    elif facts and variant == 2 and not (has_budget and has_volume):
+    if variant == 0:
+        body = f"\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435! {sentence_start(detail)}. \u041c\u043e\u0433\u0443 \u0441\u0434\u0435\u043b\u0430\u0442\u044c \u043f\u043e \u0432\u0430\u0448\u0435\u043c\u0443 \u0422\u0417."
+    elif variant == 1:
+        body = f"{sentence_start(detail)}. \u0415\u0441\u043b\u0438 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f \u0435\u0449\u0435 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u0430, \u043c\u043e\u0433\u0443 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f."
+    elif variant == 2 and not (has_budget and has_volume):
         question = "\u041c\u043e\u0436\u0435\u0442\u0435 \u0443\u0442\u043e\u0447\u043d\u0438\u0442\u044c \u0432\u0430\u0436\u043d\u044b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u043f\u043e \u0437\u0430\u0434\u0430\u0447\u0435?"
-        body = f"\u0414\u043e\u0431\u0440\u044b\u0439 \u0434\u0435\u043d\u044c! \u041f\u043e\u0434\u0445\u043e\u0434\u0438\u0442 \u0444\u043e\u0440\u043c\u0430\u0442: {fact_text}. {question}"
-    elif facts:
-        body = f"\u041c\u043e\u0433\u0443 \u0432\u0437\u044f\u0442\u044c\u0441\u044f \u0437\u0430 {fact_text}. \u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u0435\u0441\u043b\u0438 \u043d\u0443\u0436\u043d\u043e \u0431\u044b\u0441\u0442\u0440\u043e \u043e\u0431\u0441\u0443\u0434\u0438\u0442\u044c."
+        body = f"\u0414\u043e\u0431\u0440\u044b\u0439 \u0434\u0435\u043d\u044c! {sentence_start(detail)}. {question}"
+    elif variant == 3:
+        body = f"\u041f\u043e \u0444\u043e\u0440\u043c\u0430\u0442\u0443 \u043c\u043d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442. {sentence_start(detail)}. \u041c\u043e\u0433\u0443 \u0441\u0434\u0435\u043b\u0430\u0442\u044c \u0442\u0435\u0441\u0442\u043e\u0432\u043e\u0435, \u0435\u0441\u043b\u0438 \u043e\u043d\u043e \u043f\u0440\u0435\u0434\u0443\u0441\u043c\u043e\u0442\u0440\u0435\u043d\u043e."
     else:
-        body = "\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435! \u0418\u043d\u0442\u0435\u0440\u0435\u0441\u043d\u043e \u043e\u0431\u0441\u0443\u0434\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443. \u041c\u043e\u0436\u0435\u0442\u0435 \u0441\u043a\u0438\u043d\u0443\u0442\u044c \u0434\u0435\u0442\u0430\u043b\u0438?"
+        body = f"\u0417\u0430\u0438\u043d\u0442\u0435\u0440\u0435\u0441\u043e\u0432\u0430\u043b\u0430 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f. {sentence_start(detail)}. \u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u0435\u0441\u043b\u0438 \u043c\u043e\u0436\u043d\u043e \u0432\u0437\u044f\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443."
     return f"{body}\n\n\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {portfolio}"
 
 
@@ -923,10 +953,74 @@ def trim_summary_text(value: str, limit: int) -> str:
     sentence = re.search(r"^(.{20,%d}?[.!?])\s" % max(20, limit - 1), value)
     if sentence:
         return sentence.group(1).strip()
+    for separator in ["; ", ". ", ", ", " - ", " — "]:
+        parts = value.split(separator)
+        current = ""
+        for part in parts:
+            candidate = part if not current else current + separator.rstrip() + " " + part
+            if len(candidate) > limit:
+                break
+            current = candidate
+        if len(current) >= 30:
+            return current.rstrip(" ,;:-")
     shortened = value[:limit].rstrip()
     if " " in shortened:
         shortened = shortened.rsplit(" ", 1)[0]
-    return shortened.rstrip(" ,;:-")
+    shortened = shortened.rstrip(" ,;:-")
+    while shortened and is_bad_summary_candidate(shortened) and " " in shortened:
+        shortened = shortened.rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return shortened
+
+
+def clean_summary_candidate(value: str) -> str:
+    value = re.sub(r"https?://\S+|t\.me/\S+|@\w+", "", value, flags=re.I)
+    value = re.sub(r"#[\w\u0400-\u04ff-]+", "", value)
+    value = re.sub(r"[\U00010000-\U0010ffff]", "", value)
+    value = re.sub(r"\s+", " ", value.strip(" -\u2022\t:"))
+    return value.strip()
+
+
+def is_bad_summary_candidate(value: str) -> bool:
+    lowered = value.lower().strip()
+    if len(lowered) < 18:
+        return True
+    bad_markers = [
+        "\u0441\u0441\u044b\u043b\u043a\u0430",
+        "\u043a\u0430\u043d\u0430\u043b",
+        "\u0431\u043e\u0442",
+        "\u043f\u043e\u0434\u043f\u0438\u0441",
+        "\u043f\u0435\u0440\u0435\u043f\u043e\u0441\u0442",
+        "\u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f \u0432\u0437\u044f\u0442\u0430",
+        "\u043e\u0442\u043a\u043b\u0438\u043a\u0430\u0439\u0442\u0435\u0441\u044c",
+        "\u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u043b\u0438 \u0437\u043d\u0430\u043d\u0438\u0435",
+        "\u043e\u0441\u043e\u0431\u0435\u043d\u043d\u043e\u0441\u0442\u0438 \u0432 \u043f\u0440\u0438\u0435\u043c\u0435",
+    ]
+    dangling = {
+        "\u0434\u043b\u044f",
+        "\u043f\u043e",
+        "\u0438\u0437",
+        "\u043e\u0442",
+        "\u043d\u0430",
+        "\u0432",
+        "\u0441",
+        "\u043a",
+        "\u0438",
+        "\u0438\u043b\u0438",
+        "\u0434\u043b\u044f \u043e\u0431\u0440\u0430\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u0433\u043e",
+    }
+    return lowered.startswith("\u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f:") or any(marker in lowered for marker in bad_markers) or lowered.split()[-1] in dangling
+
+
+def split_fact_sentences(text: str) -> list[str]:
+    prepared = re.sub(r"([.!?])\s+", r"\1\n", text)
+    prepared = re.sub(r"\n{2,}", "\n", prepared)
+    result: list[str] = []
+    for raw_line in prepared.splitlines():
+        line = clean_summary_candidate(raw_line)
+        if not line or line.startswith("#") or is_bad_summary_candidate(line):
+            continue
+        result.append(line)
+    return result
 
 
 def make_vacancy_brief(config: dict, text: str, budget: str) -> VacancyBrief:
@@ -940,13 +1034,15 @@ def make_vacancy_brief(config: dict, text: str, budget: str) -> VacancyBrief:
         "\u041d\u0438\u043a\u0430\u043a\u0438\u0445 \u0440\u0430\u0441\u0441\u0443\u0436\u0434\u0435\u043d\u0438\u0439, \u043e\u0431\u044a\u044f\u0441\u043d\u0435\u043d\u0438\u0439, \u043c\u044b\u0441\u043b\u0435\u0439 \u043c\u043e\u0434\u0435\u043b\u0438, \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0439 \u0438\u043b\u0438 Markdown.\n"
         "\u041d\u0435 \u0432\u044b\u0432\u043e\u0434\u0438 \u043f\u043e\u043b\u043d\u044b\u0439 \u0442\u0435\u043a\u0441\u0442 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438.\n"
         "\u0412\u044b\u0436\u0438\u043c\u043a\u0430 \u0434\u043e\u043b\u0436\u043d\u0430 \u0441\u043e\u0434\u0435\u0440\u0436\u0430\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e \u0444\u0430\u043a\u0442\u044b, \u043f\u0440\u044f\u043c\u043e \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0435 \u0432 \u0438\u0441\u0445\u043e\u0434\u043d\u043e\u043c \u0442\u0435\u043a\u0441\u0442\u0435.\n"
+        "\u041f\u0443\u043d\u043a\u0442\u044b \u0434\u043e\u043b\u0436\u043d\u044b \u0431\u044b\u0442\u044c 2-3, \u0437\u0430\u043a\u043e\u043d\u0447\u0435\u043d\u043d\u044b\u0435, \u043f\u043e\u043d\u044f\u0442\u043d\u044b\u0435, \u0434\u043e 180 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432.\n"
+        "\u0423\u0431\u0438\u0440\u0430\u0439 \u0445\u044d\u0448\u0442\u0435\u0433\u0438, \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f \u043a\u0430\u043d\u0430\u043b\u043e\u0432, \u0441\u0441\u044b\u043b\u043a\u0438, \u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0442\u0435\u043a\u0441\u0442 \u0438 \u0432\u043e\u0434\u0443.\n"
         "\u041d\u0435 \u043f\u0440\u0438\u0434\u0443\u043c\u044b\u0432\u0430\u0439 \u043e\u0431\u044f\u0437\u0430\u043d\u043d\u043e\u0441\u0442\u0438, \u0444\u043e\u0440\u043c\u0430\u0442 \u0432\u0438\u0434\u0435\u043e, \u043d\u0438\u0448\u0443, \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f, \u0431\u044e\u0434\u0436\u0435\u0442 \u0438 \u0434\u0440\u0443\u0433\u0438\u0435 \u0434\u0435\u0442\u0430\u043b\u0438.\n"
         "\u0415\u0441\u043b\u0438 \u0444\u0430\u043a\u0442\u0430 \u0434\u043b\u044f \u043f\u0443\u043d\u043a\u0442\u0430 \u043d\u0435\u0442, \u043e\u0441\u0442\u0430\u0432\u044c \u0441\u0442\u0440\u043e\u043a\u0443 \u043f\u0443\u043d\u043a\u0442\u0430 \u043f\u0443\u0441\u0442\u043e\u0439.\n"
         "\u0424\u043e\u0440\u043c\u0430\u0442 \u0441\u0442\u0440\u043e\u0433\u043e 5 \u0441\u0442\u0440\u043e\u043a:\n"
         "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435: \u043a\u043e\u0440\u043e\u0442\u043a\u043e\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0438\u0437 \u0442\u0435\u043a\u0441\u0442\u0430 \u0438\u043b\u0438 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e\n"
-        "\u041f\u0443\u043d\u043a\u0442 1: \u0444\u0430\u043a\u0442 \u0438\u0437 \u0442\u0435\u043a\u0441\u0442\u0430 \u0438\u043b\u0438 \u043f\u0443\u0441\u0442\u043e\n"
-        "\u041f\u0443\u043d\u043a\u0442 2: \u0444\u0430\u043a\u0442 \u0438\u0437 \u0442\u0435\u043a\u0441\u0442\u0430 \u0438\u043b\u0438 \u043f\u0443\u0441\u0442\u043e\n"
-        "\u041f\u0443\u043d\u043a\u0442 3: \u0444\u0430\u043a\u0442 \u0438\u0437 \u0442\u0435\u043a\u0441\u0442\u0430 \u0438\u043b\u0438 \u043f\u0443\u0441\u0442\u043e\n"
+        "\u041f\u0443\u043d\u043a\u0442 1: \u0447\u0442\u043e \u043d\u0443\u0436\u043d\u043e \u0434\u0435\u043b\u0430\u0442\u044c\n"
+        "\u041f\u0443\u043d\u043a\u0442 2: \u043e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f \u0438\u043b\u0438 \u043f\u0443\u0441\u0442\u043e\n"
+        "\u041f\u0443\u043d\u043a\u0442 3: \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u0438\u043b\u0438 \u043e\u0431\u044a\u0435\u043c, \u0442\u043e\u043b\u044c\u043a\u043e \u0435\u0441\u043b\u0438 \u0443\u043a\u0430\u0437\u0430\u043d\u044b\n"
         "\u0411\u044e\u0434\u0436\u0435\u0442: \u0431\u044e\u0434\u0436\u0435\u0442 \u0438\u0437 \u0442\u0435\u043a\u0441\u0442\u0430 \u0438\u043b\u0438 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\n"
         "\u0415\u0441\u043b\u0438 \u043d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e \u0441\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u043d\u043e\u0440\u043c\u0430\u043b\u044c\u043d\u0443\u044e \u0432\u044b\u0436\u0438\u043c\u043a\u0443, \u0432\u0435\u0440\u043d\u0438 \u043f\u0443\u0441\u0442\u0443\u044e \u0441\u0442\u0440\u043e\u043a\u0443."
     )
@@ -978,9 +1074,11 @@ def clean_vacancy_brief(raw: str, text: str, budget: str) -> VacancyBrief | None
     if not enough_fact_overlap(title, text):
         title = "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e"
     bullets = [
-        trim_summary_text(item, 120)
+        trim_summary_text(clean_summary_candidate(item), 180)
         for item in bullets
-        if not is_missing_summary_value(item) and enough_fact_overlap(item, text)
+        if not is_missing_summary_value(item)
+        and enough_fact_overlap(item, text)
+        and not is_bad_summary_candidate(clean_summary_candidate(item))
     ]
     if summary_budget != "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e" and budget and summary_budget != budget and not enough_fact_overlap(summary_budget, text):
         summary_budget = budget
@@ -1009,10 +1107,7 @@ def factual_summary_lines(text: str) -> list[str]:
         "\u0433\u0440\u0430\u0444\u0438\u043a",
         "\u0442\u0440\u0435\u0431",
     ]
-    for raw_line in text.splitlines():
-        line = re.sub(r"\s+", " ", raw_line.strip(" -\u2022\t"))
-        if not line or line.startswith("#"):
-            continue
+    for line in split_fact_sentences(text):
         lowered = line.lower()
         service_markers = [
             "\u043e\u0431\u044f\u0437\u0430\u043d\u043d\u043e\u0441\u0442\u0438",
@@ -1029,7 +1124,9 @@ def factual_summary_lines(text: str) -> list[str]:
         if len(line) < 8 or (len(line.split()) <= 2 and not any(marker in lowered for marker in useful_markers)):
             continue
         target = priority_lines if any(marker in lowered for marker in useful_markers) else other_lines
-        target.append(trim_summary_text(line, 120))
+        item = trim_summary_text(line, 180)
+        if not is_bad_summary_candidate(item):
+            target.append(item)
     unique: list[str] = []
     seen: set[str] = set()
     for line in priority_lines + other_lines:
@@ -1047,7 +1144,11 @@ def make_fallback_vacancy_brief(text: str, budget: str) -> VacancyBrief:
     bullets = lines[1:4] if lines and lines[0] == title else lines[:3]
     return VacancyBrief(
         title=trim_summary_text(title, 80),
-        bullets=[trim_summary_text(item, 120) for item in bullets if not is_missing_summary_value(item)],
+        bullets=[
+            trim_summary_text(item, 180)
+            for item in bullets
+            if not is_missing_summary_value(item) and not is_bad_summary_candidate(item)
+        ][:3],
         budget=budget or "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e",
     )
 
@@ -1800,7 +1901,7 @@ def escape_telegram_html(value: str) -> str:
     return html.escape(value or "", quote=False)
 
 
-def format_lead_telegram_message(lead: Lead, brief: VacancyBrief, employer_stats: dict | None = None) -> str:
+def format_lead_telegram_message(lead: Lead, brief: VacancyBrief) -> str:
     bullets = [item for item in brief.bullets[:3] if not is_missing_summary_value(item)]
 
     title = escape_telegram_html(brief.title)
@@ -1808,15 +1909,6 @@ def format_lead_telegram_message(lead: Lead, brief: VacancyBrief, employer_stats
     relevance = escape_telegram_html(lead.status)
     link = escape_telegram_html(lead.link)
     reply = escape_telegram_html(lead.reply_draft)
-
-    employer_block = ""
-    if employer_stats:
-        employer_block = (
-            "\U0001f464 \u0420\u0430\u0431\u043e\u0442\u043e\u0434\u0430\u0442\u0435\u043b\u044c:\n"
-            f"\u2022 \u0432\u0441\u0442\u0440\u0435\u0447\u0430\u043b\u0441\u044f: {int(employer_stats.get('count', 0) or 0)} \u0440\u0430\u0437\n"
-            f"\u2022 \u043f\u0435\u0440\u0432\u0430\u044f \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f: {escape_telegram_html(str(employer_stats.get('first_seen', '')))}\n"
-            f"\u2022 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u044f\u044f \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f: {escape_telegram_html(str(employer_stats.get('last_seen', '')))}\n\n"
-        )
 
     prefix = (
         "\U0001f525 \u0412\u0430\u043a\u0430\u043d\u0441\u0438\u044f\n\n"
@@ -1826,7 +1918,6 @@ def format_lead_telegram_message(lead: Lead, brief: VacancyBrief, employer_stats
         + "\n"
         f"\U0001f4b0 \u0411\u044e\u0434\u0436\u0435\u0442: {budget}\n\n"
         f"\u2b50 \u0420\u0435\u043b\u0435\u0432\u0430\u043d\u0442\u043d\u043e\u0441\u0442\u044c: {relevance}\n\n"
-        f"{employer_block}"
         f"\U0001f517 \u0421\u0441\u044b\u043b\u043a\u0430: {link}\n\n"
         "\U0001f4ac \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043e\u0442\u043a\u043b\u0438\u043a:\n"
     )
@@ -2088,7 +2179,6 @@ def send_telegram_notification(
     config: dict,
     leads: list[Lead],
     errors: list[str],
-    employer_stats_by_lead_id: dict[str, dict] | None = None,
 ) -> None:
     token, chat_id = telegram_credentials(config)
     if not token or not chat_id:
@@ -2106,11 +2196,7 @@ def send_telegram_notification(
         if not lead.lead_id:
             lead.lead_id = make_lead_id(lead.link)
         brief = make_vacancy_brief(config, lead.message, lead.budget)
-        text = format_lead_telegram_message(
-            lead,
-            brief,
-            (employer_stats_by_lead_id or {}).get(lead.lead_id),
-        )
+        text = format_lead_telegram_message(lead, brief)
         chunks = split_telegram_text(text)
         for index, chunk in enumerate(chunks):
             reply_markup = status_buttons(lead.lead_id) if index == len(chunks) - 1 else None
@@ -2280,13 +2366,11 @@ def main() -> int:
 
     if new_leads:
         try:
-            employer_history, employer_stats = build_employer_history_update(new_leads)
-            send_telegram_notification(config, new_leads, [], employer_stats)
+            send_telegram_notification(config, new_leads, [])
             notification_status = "уведомление отправлено"
             for lead in new_leads:
                 mark_lead_sent(runtime_state, lead)
             append_leads(new_leads)
-            save_employer_history(employer_history)
         except (RuntimeError, urllib.error.URLError) as error:
             notification_status = f"уведомление не отправлено: {error}"
 
