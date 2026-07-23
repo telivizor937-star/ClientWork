@@ -1,34 +1,34 @@
-Запуск: 2026-07-23T09:46:52
-Каналов проверено: 53
-Постов найдено: 905
-Пропущено как уже существующие: 848
-Отфильтровано: 57
+Запуск: 2026-07-23T09:58:56
+Каналов проверено: 44
+Постов найдено: 786
+Пропущено как уже существующие: 625
+Отфильтровано: 161
 Причины фильтрации:
 - нет Reels/Shorts/TikTok: 0
-- нет монтажа: 31
-- нет вакансии/заказа: 2
-- стоп-слова: 7
+- нет монтажа: 139
+- нет вакансии/заказа: 0
+- стоп-слова: 5
 Новых лидов: 0
-Источников в запуске: 71 из 202
+Источников в запуске: 62 из 202
 Discovery: skipped, candidates=0, checked=0, added=0
 Таблица: /home/runner/work/ClientWork/ClientWork/leads.csv
 Уведомления: уведомлений не было
 Ошибки:
-https://t.me/tiktok_jobs: empty_or_unavailable
-https://t.me/capcut_jobs: empty_or_unavailable
 https://t.me/production_jobs: empty_or_unavailable
-https://t.me/video_editor_jobs: empty_or_unavailable
-https://t.me/videomontage_work: empty_or_unavailable
 https://t.me/producer_job: empty_or_unavailable
+https://t.me/video_editor_jobs: empty_or_unavailable
+https://t.me/tiktok_jobs: empty_or_unavailable
 https://t.me/real_video_client: not_public_or_deleted
-https://t.me/reels_work: not_public_or_deleted
-https://t.me/kinopoisk_jobs: empty_or_unavailable
 https://t.me/vakansii_reelsmaker: not_public_or_deleted
+https://t.me/videomontage_work: empty_or_unavailable
+https://t.me/capcut_jobs: empty_or_unavailable
+https://t.me/kinopoisk_jobs: empty_or_unavailable
+https://t.me/reels_work: not_public_or_deleted
 https://t.me/motion_jobs: empty_or_unavailable
-https://t.me/premiere_jobs: empty_or_unavailable
 https://t.me/after_effects_jobs: empty_or_unavailable
-https://t.me/postproduction_jobs: empty_or_unavailable
+https://t.me/premiere_jobs: empty_or_unavailable
+https://t.me/podcast_jobs: empty_or_unavailable
 https://t.me/videographer_jobs: empty_or_unavailable
+https://t.me/postproduction_jobs: empty_or_unavailable
 https://t.me/studio_jobs: empty_or_unavailable
 https://t.me/media_work: empty_or_unavailable
-https://t.me/podcast_jobs: empty_or_unavailable
