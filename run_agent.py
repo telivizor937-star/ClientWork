@@ -1522,19 +1522,60 @@ def split_telegram_text(text: str, limit: int = 3900) -> list[str]:
     return chunks
 
 
-def send_telegram_message(token: str, chat_id: str, text: str, reply_markup: dict | None = None) -> None:
+def send_telegram_message(
+    token: str,
+    chat_id: str,
+    text: str,
+    reply_markup: dict | None = None,
+    parse_mode: str | None = None,
+) -> None:
     api_url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
         "disable_web_page_preview": "true",
     }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
     data = urllib.parse.urlencode(payload).encode("utf-8")
     request = urllib.request.Request(api_url, data=data, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=30) as response:
         response.read()
+
+
+def escape_telegram_html(value: str) -> str:
+    return html.escape(value or "", quote=False)
+
+
+def format_lead_telegram_message(lead: Lead, brief: VacancyBrief) -> str:
+    bullets = list(brief.bullets[:3])
+    while len(bullets) < 3:
+        bullets.append("не указано")
+
+    title = escape_telegram_html(brief.title)
+    budget = escape_telegram_html(brief.budget or "не указан")
+    relevance = escape_telegram_html(lead.status)
+    link = escape_telegram_html(lead.link)
+    reply = escape_telegram_html(lead.reply_draft)
+
+    prefix = (
+        "\U0001f525 \u0412\u0430\u043a\u0430\u043d\u0441\u0438\u044f\n\n"
+        f"\U0001f3ac {title}\n\n"
+        "\U0001f4cc \u041a\u0440\u0430\u0442\u043a\u043e:\n"
+        f"\u2022 {escape_telegram_html(bullets[0])}\n"
+        f"\u2022 {escape_telegram_html(bullets[1])}\n"
+        f"\u2022 {escape_telegram_html(bullets[2])}\n\n"
+        f"\U0001f4b0 \u0411\u044e\u0434\u0436\u0435\u0442: {budget}\n\n"
+        f"\u2b50 \u0420\u0435\u043b\u0435\u0432\u0430\u043d\u0442\u043d\u043e\u0441\u0442\u044c: {relevance}\n\n"
+        f"\U0001f517 \u0421\u0441\u044b\u043b\u043a\u0430: {link}\n\n"
+        "\U0001f4ac \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043e\u0442\u043a\u043b\u0438\u043a:\n"
+    )
+    max_reply_length = max(0, 3900 - len(prefix) - len("<pre></pre>"))
+    if len(reply) > max_reply_length:
+        reply = reply[:max_reply_length].rstrip()
+    return f"{prefix}<pre>{reply}</pre>"
 
 
 def send_telegram_document(token: str, chat_id: str, file_path: Path, caption: str) -> None:
@@ -1752,23 +1793,11 @@ def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str
         if not lead.lead_id:
             lead.lead_id = make_lead_id(lead.link)
         brief = make_vacancy_brief(config, lead.message, lead.budget)
-        text = (
-            "\U0001f525 \u0412\u0430\u043a\u0430\u043d\u0441\u0438\u044f\n\n"
-            f"\U0001f3ac {brief.title}\n\n"
-            "\U0001f4cc \u041a\u0440\u0430\u0442\u043a\u043e:\n"
-            f"\u2022 {brief.bullets[0]}\n"
-            f"\u2022 {brief.bullets[1]}\n"
-            f"\u2022 {brief.bullets[2]}\n\n"
-            f"\U0001f4b0 \u0411\u044e\u0434\u0436\u0435\u0442: {brief.budget or '\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d'}\n\n"
-            f"\u2b50 \u0420\u0435\u043b\u0435\u0432\u0430\u043d\u0442\u043d\u043e\u0441\u0442\u044c: {lead.status}\n\n"
-            f"\U0001f517 \u0421\u0441\u044b\u043b\u043a\u0430: {lead.link}\n\n"
-            "\U0001f4ac \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043e\u0442\u043a\u043b\u0438\u043a:\n"
-            f"{lead.reply_draft}"
-        )
+        text = format_lead_telegram_message(lead, brief)
         chunks = split_telegram_text(text)
         for index, chunk in enumerate(chunks):
             reply_markup = status_buttons(lead.lead_id) if index == len(chunks) - 1 else None
-            send_telegram_message(token, chat_id, chunk, reply_markup=reply_markup)
+            send_telegram_message(token, chat_id, chunk, reply_markup=reply_markup, parse_mode="HTML")
 
     if len(leads) > 12:
         send_telegram_message(token, chat_id, f"\u0415\u0449\u0435 {len(leads) - 12} \u043b\u0438\u0434\u043e\u0432 \u043e\u0441\u0442\u0430\u043b\u0438\u0441\u044c \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435.")
