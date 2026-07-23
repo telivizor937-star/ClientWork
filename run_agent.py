@@ -565,7 +565,7 @@ def make_reply_draft(config: dict, text: str) -> str:
     )
     for model in OPENROUTER_MODELS:
         reply = request_openrouter_reply(api_key, model, system_prompt, text)
-        cleaned = clean_reply_draft(reply, config)
+        cleaned = clean_reply_draft(reply, config, text)
         if cleaned:
             return cleaned
     return make_fallback_reply(config)
@@ -578,7 +578,7 @@ def request_openrouter_reply(api_key: str, model: str, system_prompt: str, vacan
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": vacancy_text},
             ],
-            "temperature": 0.8,
+            "temperature": 0.3,
             "max_tokens": 220,
         },
         ensure_ascii=False,
@@ -603,14 +603,18 @@ def request_openrouter_reply(api_key: str, model: str, system_prompt: str, vacan
         return ""
 
 
-def clean_reply_draft(reply: str, config: dict) -> str:
+def clean_reply_draft(reply: str, config: dict, vacancy_text: str = "") -> str:
     reply = reply.strip()
     if is_invalid_model_output(reply):
+        return ""
+    if has_unsupported_reply_details(reply, vacancy_text):
         return ""
     portfolio_url = config["portfolio_url"]
     if portfolio_url not in reply:
         reply = f"{reply.rstrip()}\n\n\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {portfolio_url}"
-    return "" if is_invalid_model_output(reply) else reply.strip()
+    if is_invalid_model_output(reply) or has_unsupported_reply_details(reply, vacancy_text):
+        return ""
+    return reply.strip()
 
 
 def is_invalid_model_output(
@@ -674,6 +678,55 @@ def make_fallback_reply(config: dict) -> str:
         f"\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {config['portfolio_url']}"
     )
 
+
+def source_contains_any(source_text: str, variants: list[str]) -> bool:
+    lowered = source_text.lower()
+    return any(variant in lowered for variant in variants)
+
+
+def has_unsupported_reply_details(reply: str, vacancy_text: str) -> bool:
+    if not vacancy_text:
+        return False
+    checks = [
+        (["reels", "\u0440\u0438\u043b\u0441"], ["reels", "\u0440\u0438\u043b\u0441"]),
+        (["shorts", "\u0448\u043e\u0440\u0442\u0441"], ["shorts", "\u0448\u043e\u0440\u0442\u0441"]),
+        (["tiktok", "tik tok", "\u0442\u0438\u043a\u0442\u043e\u043a"], ["tiktok", "tik tok", "\u0442\u0438\u043a\u0442\u043e\u043a"]),
+        (["youtube", "\u044e\u0442\u0443\u0431"], ["youtube", "\u044e\u0442\u0443\u0431"]),
+        (["capcut", "vn", "premiere", "after effects"], ["capcut", "vn", "premiere", "after effects"]),
+        (["\u0448\u0443\u043c"], ["\u0448\u0443\u043c"]),
+        (["\u043c\u0443\u0437\u044b\u043a"], ["\u043c\u0443\u0437\u044b\u043a"]),
+        (["\u0441\u0443\u0431\u0442\u0438\u0442\u0440"], ["\u0441\u0443\u0431\u0442\u0438\u0442\u0440"]),
+        (["\u0434\u0438\u043d\u0430\u043c\u0438\u0447"], ["\u0434\u0438\u043d\u0430\u043c\u0438\u0447"]),
+        (["\u0445\u0443\u043a"], ["\u0445\u0443\u043a"]),
+        (["\u0443\u0434\u0435\u0440\u0436\u0430\u043d"], ["\u0443\u0434\u0435\u0440\u0436\u0430\u043d"]),
+        (["\u0446\u0432\u0435\u0442"], ["\u0446\u0432\u0435\u0442"]),
+        (["\u043e\u0431\u043b\u043e\u0436"], ["\u043e\u0431\u043b\u043e\u0436"]),
+        (["\u0430\u043d\u0438\u043c\u0430\u0446"], ["\u0430\u043d\u0438\u043c\u0430\u0446"]),
+        (["\u044d\u0444\u0444\u0435\u043a\u0442"], ["\u044d\u0444\u0444\u0435\u043a\u0442"]),
+        (["\u043f\u0435\u0440\u0435\u0445\u043e\u0434"], ["\u043f\u0435\u0440\u0435\u0445\u043e\u0434"]),
+        (["\u043e\u0437\u0432\u0443\u0447"], ["\u043e\u0437\u0432\u0443\u0447"]),
+        (["\u0441\u0446\u0435\u043d\u0430\u0440"], ["\u0441\u0446\u0435\u043d\u0430\u0440"]),
+    ]
+    lowered_reply = reply.lower()
+    return any(
+        any(marker in lowered_reply for marker in reply_markers)
+        and not source_contains_any(vacancy_text, source_markers)
+        for reply_markers, source_markers in checks
+    )
+
+
+def enough_fact_overlap(value: str, source_text: str) -> bool:
+    normalized = value.strip().lower()
+    if not normalized or normalized == "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e":
+        return True
+    if normalized in source_text.lower():
+        return True
+    words = re.findall(r"[a-zA-Z\u0400-\u04ff0-9]{4,}", normalized)
+    if not words:
+        return True
+    source_lowered = source_text.lower()
+    return sum(1 for word in words if word in source_lowered) >= min(2, len(words))
+
 def make_vacancy_brief(config: dict, text: str, budget: str) -> VacancyBrief:
     api_key = str(config.get("openrouter_api_key", "")).strip()
     if not api_key:
@@ -720,16 +773,77 @@ def clean_vacancy_brief(raw: str, text: str, budget: str) -> VacancyBrief | None
         values.get("\u043f\u0443\u043d\u043a\u0442 3", "") or "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e",
     ]
     summary_budget = values.get("\u0431\u044e\u0434\u0436\u0435\u0442", "") or budget or "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e"
+    if not enough_fact_overlap(title, text):
+        title = "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e"
+    bullets = [item if enough_fact_overlap(item, text) else "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e" for item in bullets]
+    if summary_budget != "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e" and budget and summary_budget != budget and not enough_fact_overlap(summary_budget, text):
+        summary_budget = budget
     return VacancyBrief(title=title[:80], bullets=[item[:120] for item in bullets], budget=summary_budget[:80])
 
+
+def factual_summary_lines(text: str) -> list[str]:
+    priority_lines: list[str] = []
+    other_lines: list[str] = []
+    useful_markers = [
+        "\u0438\u0449\u0443",
+        "\u0438\u0449\u0435\u043c",
+        "\u043d\u0443\u0436",
+        "\u043c\u043e\u043d\u0442\u0430\u0436",
+        "\u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440",
+        "reels",
+        "\u0440\u0438\u043b\u0441",
+        "shorts",
+        "youtube",
+        "tiktok",
+        "\u043e\u043f\u044b\u0442",
+        "\u0443\u0434\u0430\u043b",
+        "\u043e\u043f\u043b\u0430\u0442",
+        "\u0431\u044e\u0434\u0436\u0435\u0442",
+        "\u043e\u0431\u044a\u0435\u043c",
+        "\u0433\u0440\u0430\u0444\u0438\u043a",
+        "\u0442\u0440\u0435\u0431",
+    ]
+    for raw_line in text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line.strip(" -\u2022\t"))
+        if not line or line.startswith("#"):
+            continue
+        lowered = line.lower()
+        service_markers = [
+            "\u043e\u0431\u044f\u0437\u0430\u043d\u043d\u043e\u0441\u0442\u0438",
+            "\u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f",
+            "\u0443\u0441\u043b\u043e\u0432\u0438",
+            "\u0431\u044e\u0434\u0436\u0435\u0442",
+            "\u0441\u0441\u044b\u043b\u043a\u0430 \u043d\u0430 \u043f\u0440\u043e\u0435\u043a\u0442",
+            "\u043d\u0435 \u043d\u0443\u0436\u043d\u044b",
+        ]
+        if any(marker in lowered for marker in service_markers) and len(line.split()) <= 4:
+            continue
+        if any(marker in lowered for marker in ["\u043a\u0442\u043e \u0443\u0447\u0438\u0442\u0441\u044f", "\u043a\u0442\u043e \u043f\u0440\u043e\u043f\u0430\u0434\u0430\u0435\u0442", "\u043d\u0435 \u0440\u0430\u0441\u0441\u043c\u0430\u0442\u0440"]):
+            continue
+        if len(line) < 8 or (len(line.split()) <= 2 and not any(marker in lowered for marker in useful_markers)):
+            continue
+        target = priority_lines if any(marker in lowered for marker in useful_markers) else other_lines
+        target.append(line[:120])
+    unique: list[str] = []
+    seen: set[str] = set()
+    for line in priority_lines + other_lines:
+        key = line.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(line)
+    return unique
+
+
 def make_fallback_vacancy_brief(text: str, budget: str) -> VacancyBrief:
+    lines = factual_summary_lines(text)
+    generated_title = make_title(text)
+    title = lines[0] if generated_title.startswith("#") and lines else generated_title or (lines[0] if lines else "\u0412\u0430\u043a\u0430\u043d\u0441\u0438\u044f")
+    bullets = lines[1:4] if lines and lines[0] == title else lines[:3]
+    while len(bullets) < 3:
+        bullets.append("\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e")
     return VacancyBrief(
-        title=make_title(text) or "\u0412\u0430\u043a\u0430\u043d\u0441\u0438\u044f",
-        bullets=[
-            "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e",
-            "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e",
-            "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e",
-        ],
+        title=title[:80],
+        bullets=[item[:120] for item in bullets],
         budget=budget or "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e",
     )
 
