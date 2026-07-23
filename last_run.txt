@@ -1,35 +1,34 @@
-Запуск: 2026-07-23T07:02:51
-Каналов проверено: 52
-Постов найдено: 812
-Пропущено как уже существующие: 789
-Отфильтровано: 23
+Запуск: 2026-07-23T09:30:10
+Каналов проверено: 53
+Постов найдено: 898
+Пропущено как уже существующие: 845
+Отфильтровано: 50
 Причины фильтрации:
 - нет Reels/Shorts/TikTok: 0
-- нет монтажа: 16
-- нет вакансии/заказа: 0
-- стоп-слова: 4
-Новых лидов: 0
+- нет монтажа: 33
+- нет вакансии/заказа: 2
+- стоп-слова: 9
+Новых лидов: 3
 Источников в запуске: 71 из 202
 Discovery: skipped, candidates=0, checked=0, added=0
 Таблица: /home/runner/work/ClientWork/ClientWork/leads.csv
-Уведомления: уведомлений не было
+Уведомления: уведомление отправлено
 Ошибки:
-https://t.me/videomontage_work: empty_or_unavailable
 https://t.me/capcut_jobs: empty_or_unavailable
-https://t.me/kinopoisk_jobs: empty_or_unavailable
+https://t.me/video_editor_jobs: empty_or_unavailable
+https://t.me/reels_work: not_public_or_deleted
+https://t.me/videomontage_work: empty_or_unavailable
 https://t.me/producer_job: empty_or_unavailable
 https://t.me/real_video_client: not_public_or_deleted
-https://t.me/tiktok_jobs: empty_or_unavailable
-https://t.me/video_editor_jobs: empty_or_unavailable
-https://t.me/vakansii_reelsmaker: not_public_or_deleted
+https://t.me/kinopoisk_jobs: empty_or_unavailable
 https://t.me/production_jobs: empty_or_unavailable
-https://t.me/reels_work: not_public_or_deleted
+https://t.me/tiktok_jobs: empty_or_unavailable
+https://t.me/vakansii_reelsmaker: not_public_or_deleted
 https://t.me/motion_jobs: empty_or_unavailable
-https://t.me/postproduction_jobs: empty_or_unavailable
-https://t.me/premiere_jobs: empty_or_unavailable
-https://t.me/podcast_jobs: empty_or_unavailable
-https://t.me/videographer_jobs: empty_or_unavailable
 https://t.me/studio_jobs: empty_or_unavailable
 https://t.me/media_work: empty_or_unavailable
 https://t.me/after_effects_jobs: empty_or_unavailable
-https://t.me/freejobs5: not_public_or_deleted
+https://t.me/premiere_jobs: empty_or_unavailable
+https://t.me/podcast_jobs: empty_or_unavailable
+https://t.me/postproduction_jobs: empty_or_unavailable
+https://t.me/videographer_jobs: empty_or_unavailable
