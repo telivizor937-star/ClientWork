@@ -1037,12 +1037,16 @@ def append_leads(leads: list[Lead]) -> None:
     write_lead_rows(rows)
 
 
-def update_lead_status(lead_id: str, contact_status: str, now: datetime) -> bool:
+def update_lead_status(lead_id: str, contact_status: str, now: datetime) -> tuple[bool, dict[str, str] | None]:
     rows = read_lead_rows()
     changed = False
+    updated_row: dict[str, str] | None = None
     for row in rows:
         if row.get("lead_id") != lead_id:
             continue
+        updated_row = row
+        if row.get("contact_status") == contact_status:
+            break
         row["contact_status"] = contact_status
         if contact_status == "contacted" and not row.get("contacted_at"):
             row["contacted_at"] = now.isoformat(timespec="seconds")
@@ -1050,7 +1054,34 @@ def update_lead_status(lead_id: str, contact_status: str, now: datetime) -> bool
         break
     if changed:
         write_lead_rows(rows)
-    return changed
+    return changed, updated_row
+
+
+def update_lead_action(lead_id: str, action: str, now: datetime) -> tuple[bool, dict[str, str] | None]:
+    if action == "replied":
+        return update_lead_status(lead_id, "contacted", now)
+    if action == "rejected":
+        return update_lead_status(lead_id, "skipped", now)
+    if action != "client_answered":
+        return False, None
+
+    rows = read_lead_rows()
+    changed = False
+    updated_row: dict[str, str] | None = None
+    for row in rows:
+        if row.get("lead_id") != lead_id:
+            continue
+        updated_row = row
+        if row.get("client_answered") == "yes":
+            break
+        row["client_answered"] = "yes"
+        if not row.get("client_answered_at"):
+            row["client_answered_at"] = now.isoformat(timespec="seconds")
+        changed = True
+        break
+    if changed:
+        write_lead_rows(rows)
+    return changed, updated_row
 
 
 def load_channel_sources() -> list[ChannelSource]:
@@ -1612,14 +1643,40 @@ def answer_callback_query(token: str, callback_query_id: str, text: str) -> None
         response.read()
 
 
-def status_buttons(lead_id: str) -> dict:
+def edit_message_reply_markup(token: str, chat_id: str, message_id: int, reply_markup: dict) -> None:
+    data = urllib.parse.urlencode(
+        {
+            "chat_id": chat_id,
+            "message_id": str(message_id),
+            "reply_markup": json.dumps(reply_markup, ensure_ascii=False),
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/editMessageReplyMarkup",
+        data=data,
+        headers={"User-Agent": USER_AGENT},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        response.read()
+
+
+def status_buttons(lead_id: str, contact_status: str = "not_contacted", client_answered: str = "no") -> dict:
+    replied_label = "\u2705 \u042f \u043e\u0442\u043a\u043b\u0438\u043a\u043d\u0443\u043b\u0441\u044f"
+    answered_label = "\U0001f4ac \u041a\u043b\u0438\u0435\u043d\u0442 \u043e\u0442\u0432\u0435\u0442\u0438\u043b"
+    rejected_label = "\u274c \u041d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442"
+    if contact_status == "contacted":
+        replied_label += " \u2713"
+    if client_answered == "yes":
+        answered_label += " \u2713"
+    if contact_status == "skipped":
+        rejected_label += " \u2713"
     return {
         "inline_keyboard": [
             [
-                {"text": "\u2705 \u041e\u0442\u0432\u0435\u0442\u0438\u043b", "callback_data": f"lead:contacted:{lead_id}"},
-                {"text": "\u274c \u041d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b", "callback_data": f"lead:not_contacted:{lead_id}"},
+                {"text": replied_label, "callback_data": f"lead:replied:{lead_id}"},
+                {"text": answered_label, "callback_data": f"lead:client_answered:{lead_id}"},
             ],
-            [{"text": "\u23ed \u041d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442", "callback_data": f"lead:skipped:{lead_id}"}],
+            [{"text": rejected_label, "callback_data": f"lead:rejected:{lead_id}"}],
         ]
     }
 
@@ -1727,19 +1784,43 @@ def process_telegram_updates(config: dict, state: dict, now: datetime) -> None:
         message = update.get("message") or {}
         if callback:
             data = str(callback.get("data", ""))
-            match = re.fullmatch(r"lead:(contacted|not_contacted|skipped):([a-f0-9]{12})", data)
+            match = re.fullmatch(
+                r"lead:(replied|client_answered|rejected|contacted|not_contacted|skipped):([a-f0-9]{12})",
+                data,
+            )
             if match:
-                status, lead_id = match.groups()
-                changed = update_lead_status(lead_id, status, now)
+                action, lead_id = match.groups()
+                legacy_actions = {
+                    "contacted": "replied",
+                    "not_contacted": "not_contacted",
+                    "skipped": "rejected",
+                }
+                action = legacy_actions.get(action, action)
+                if action == "not_contacted":
+                    changed, row = update_lead_status(lead_id, "not_contacted", now)
+                else:
+                    changed, row = update_lead_action(lead_id, action, now)
                 text = {
-                    "contacted": "\u2705 \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u043e\u0442\u043a\u043b\u0438\u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d",
+                    "replied": "\u2705 \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u0432\u044b \u043e\u0442\u043a\u043b\u0438\u043a\u043d\u0443\u043b\u0438\u0441\u044c",
+                    "client_answered": "\U0001f4ac \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u043a\u043b\u0438\u0435\u043d\u0442 \u043e\u0442\u0432\u0435\u0442\u0438\u043b",
+                    "rejected": "\u274c \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u043d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442",
                     "not_contacted": "\u274c \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u043f\u043e\u043a\u0430 \u043d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b\u0438",
-                    "skipped": "\u23ed \u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e: \u043d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442",
-                }[status]
+                }[action]
                 try:
                     answer_callback_query(token, callback.get("id", ""), text)
-                    if changed:
-                        send_telegram_message(token, chat_id, text)
+                    callback_message = callback.get("message") or {}
+                    message_id = int(callback_message.get("message_id", 0) or 0)
+                    if row and message_id:
+                        edit_message_reply_markup(
+                            token,
+                            chat_id,
+                            message_id,
+                            status_buttons(
+                                lead_id,
+                                row.get("contact_status", "not_contacted"),
+                                row.get("client_answered", "no"),
+                            ),
+                        )
                 except (urllib.error.URLError, TimeoutError, OSError):
                     pass
             continue
