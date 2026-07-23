@@ -86,7 +86,7 @@ jobs:
           git config user.name "reels-lead-agent"
           git config user.email "actions@github.com"
           git pull --rebase --autostash
-          git add runtime_state.json sources.json discovered_sources.csv leads.csv last_run.txt
+          git add runtime_state.json sources.json discovered_sources.csv leads.csv last_run.txt employer_history.json
           if [ -f unavailable_channels.csv ]; then git add unavailable_channels.csv; fi
           git add daily_leads_*.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update bot runtime state"

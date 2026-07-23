@@ -25,6 +25,7 @@ RUN_LOG_FILE = ROOT / "last_run.txt"
 UNAVAILABLE_CHANNELS_FILE = ROOT / "unavailable_channels.csv"
 DISCOVERED_SOURCES_FILE = ROOT / "discovered_sources.csv"
 RUNTIME_STATE_FILE = ROOT / "runtime_state.json"
+EMPLOYER_HISTORY_FILE = ROOT / "employer_history.json"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -1143,6 +1144,106 @@ def read_existing_links() -> set[str]:
     return {row["vacancy_url"] for row in read_lead_rows() if row.get("vacancy_url")}
 
 
+def normalize_employer_id(value: str) -> str:
+    value = value.strip().lower()
+    value = re.sub(r"^https?://", "", value)
+    value = re.sub(r"^t\.me/", "@", value)
+    value = value.strip(" /.,;)")
+    if value.startswith("@"):
+        return "tg:" + value[1:]
+    if "@" in value and "." in value:
+        return "email:" + value
+    digits = re.sub(r"\D", "", value)
+    if len(digits) >= 10:
+        return "phone:" + digits[-11:]
+    return value
+
+
+def extract_employer_id(text: str) -> str:
+    skip_usernames = {
+        "youtube",
+        "reels",
+        "shorts",
+        "tiktok",
+        "telegram",
+        "workinonlybusiness",
+    }
+    patterns = [
+        r"(?:контакт|связ[ьи]|писать|пишите|лс|директ|отклик)[^\n@]*(@[a-zA-Z0-9_]{5,32})",
+        r"(?:контакт|связ[ьи]|писать|пишите|лс|директ|отклик)[^\n]*(?:https?://)?t\.me/([a-zA-Z0-9_]{5,32})",
+        r"@[a-zA-Z0-9_]{5,32}",
+        r"(?:https?://)?t\.me/[a-zA-Z0-9_]{5,32}",
+        r"[\w.+-]+@[\w.-]+\.\w+",
+        r"(?:\+?\d[\d\s().-]{9,}\d)",
+    ]
+    for pattern in patterns:
+        for match in re.findall(pattern, text, flags=re.I):
+            value = match if isinstance(match, str) else next((item for item in match if item), "")
+            if not value:
+                continue
+            if re.fullmatch(r"[a-zA-Z0-9_]{5,32}", value):
+                value = "@" + value
+            normalized = normalize_employer_id(value)
+            username = normalized.removeprefix("tg:")
+            if username and username in skip_usernames:
+                continue
+            return normalized
+    return ""
+
+
+def lead_history_date(lead: Lead) -> str:
+    return (lead.post_date or lead.found_at or datetime.now(timezone.utc).isoformat(timespec="seconds"))[:10]
+
+
+def load_employer_history() -> dict[str, dict]:
+    if not EMPLOYER_HISTORY_FILE.exists():
+        return {}
+    try:
+        data = json.loads(EMPLOYER_HISTORY_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_employer_history(history: dict[str, dict]) -> None:
+    EMPLOYER_HISTORY_FILE.write_text(
+        json.dumps(history, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def build_employer_history_update(leads: list[Lead]) -> tuple[dict[str, dict], dict[str, dict]]:
+    history = load_employer_history()
+    stats_by_lead_id: dict[str, dict] = {}
+    for lead in leads:
+        employer_id = extract_employer_id(lead.message)
+        if not employer_id:
+            continue
+        lead_id = lead.lead_id or make_lead_id(lead.link)
+        date = lead_history_date(lead)
+        entry = history.setdefault(
+            employer_id,
+            {
+                "employer_id": employer_id,
+                "first_seen": date,
+                "last_seen": date,
+                "lead_ids": [],
+            },
+        )
+        lead_ids = entry.setdefault("lead_ids", [])
+        if lead_id not in lead_ids:
+            lead_ids.append(lead_id)
+        entry["first_seen"] = min(str(entry.get("first_seen") or date), date)
+        entry["last_seen"] = max(str(entry.get("last_seen") or date), date)
+        entry["count"] = len(set(lead_ids))
+        stats_by_lead_id[lead_id] = {
+            "count": entry["count"],
+            "first_seen": entry["first_seen"],
+            "last_seen": entry["last_seen"],
+        }
+    return history, stats_by_lead_id
+
+
 def append_leads(leads: list[Lead]) -> None:
     if not leads:
         return
@@ -1699,7 +1800,7 @@ def escape_telegram_html(value: str) -> str:
     return html.escape(value or "", quote=False)
 
 
-def format_lead_telegram_message(lead: Lead, brief: VacancyBrief) -> str:
+def format_lead_telegram_message(lead: Lead, brief: VacancyBrief, employer_stats: dict | None = None) -> str:
     bullets = [item for item in brief.bullets[:3] if not is_missing_summary_value(item)]
 
     title = escape_telegram_html(brief.title)
@@ -1707,6 +1808,15 @@ def format_lead_telegram_message(lead: Lead, brief: VacancyBrief) -> str:
     relevance = escape_telegram_html(lead.status)
     link = escape_telegram_html(lead.link)
     reply = escape_telegram_html(lead.reply_draft)
+
+    employer_block = ""
+    if employer_stats:
+        employer_block = (
+            "\U0001f464 \u0420\u0430\u0431\u043e\u0442\u043e\u0434\u0430\u0442\u0435\u043b\u044c:\n"
+            f"\u2022 \u0432\u0441\u0442\u0440\u0435\u0447\u0430\u043b\u0441\u044f: {int(employer_stats.get('count', 0) or 0)} \u0440\u0430\u0437\n"
+            f"\u2022 \u043f\u0435\u0440\u0432\u0430\u044f \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f: {escape_telegram_html(str(employer_stats.get('first_seen', '')))}\n"
+            f"\u2022 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u044f\u044f \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f: {escape_telegram_html(str(employer_stats.get('last_seen', '')))}\n\n"
+        )
 
     prefix = (
         "\U0001f525 \u0412\u0430\u043a\u0430\u043d\u0441\u0438\u044f\n\n"
@@ -1716,6 +1826,7 @@ def format_lead_telegram_message(lead: Lead, brief: VacancyBrief) -> str:
         + "\n"
         f"\U0001f4b0 \u0411\u044e\u0434\u0436\u0435\u0442: {budget}\n\n"
         f"\u2b50 \u0420\u0435\u043b\u0435\u0432\u0430\u043d\u0442\u043d\u043e\u0441\u0442\u044c: {relevance}\n\n"
+        f"{employer_block}"
         f"\U0001f517 \u0421\u0441\u044b\u043b\u043a\u0430: {link}\n\n"
         "\U0001f4ac \u0413\u043e\u0442\u043e\u0432\u044b\u0439 \u043e\u0442\u043a\u043b\u0438\u043a:\n"
     )
@@ -1973,7 +2084,12 @@ def discover_telegram_chat_id(config: dict) -> str:
     return ""
 
 
-def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str]) -> None:
+def send_telegram_notification(
+    config: dict,
+    leads: list[Lead],
+    errors: list[str],
+    employer_stats_by_lead_id: dict[str, dict] | None = None,
+) -> None:
     token, chat_id = telegram_credentials(config)
     if not token or not chat_id:
         raise RuntimeError("Telegram notifications are not configured: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
@@ -1990,7 +2106,11 @@ def send_telegram_notification(config: dict, leads: list[Lead], errors: list[str
         if not lead.lead_id:
             lead.lead_id = make_lead_id(lead.link)
         brief = make_vacancy_brief(config, lead.message, lead.budget)
-        text = format_lead_telegram_message(lead, brief)
+        text = format_lead_telegram_message(
+            lead,
+            brief,
+            (employer_stats_by_lead_id or {}).get(lead.lead_id),
+        )
         chunks = split_telegram_text(text)
         for index, chunk in enumerate(chunks):
             reply_markup = status_buttons(lead.lead_id) if index == len(chunks) - 1 else None
@@ -2160,11 +2280,13 @@ def main() -> int:
 
     if new_leads:
         try:
-            send_telegram_notification(config, new_leads, [])
+            employer_history, employer_stats = build_employer_history_update(new_leads)
+            send_telegram_notification(config, new_leads, [], employer_stats)
             notification_status = "уведомление отправлено"
             for lead in new_leads:
                 mark_lead_sent(runtime_state, lead)
             append_leads(new_leads)
+            save_employer_history(employer_history)
         except (RuntimeError, urllib.error.URLError) as error:
             notification_status = f"уведомление не отправлено: {error}"
 
