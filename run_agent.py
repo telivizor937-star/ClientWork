@@ -719,6 +719,7 @@ def detect_reply_context(text: str) -> dict[str, object]:
         ("рекламные креативы", ["реклам", "креатив"]),
         ("образовательный контент", ["образователь", "обучающ", "курс", "урок"]),
         ("блог", ["блог", "личный бренд"]),
+        ("выступления и закулисье", ["выступлен", "гастрол", "закулис"]),
         ("постоянное сотрудничество", ["постоян", "долгоср", "в штат", "регулярн"]),
         ("проектная работа", ["проект", "разово", "единораз"]),
         ("субтитры", ["субтитр"]),
@@ -743,16 +744,16 @@ def detect_reply_context(text: str) -> dict[str, object]:
     if "интервью" in facts:
         role = "монтажёра интервью"
     work_type = "о монтаже видео"
-    if "постоянное сотрудничество" in facts:
-        work_type = "о постоянном сотрудничестве"
-    elif "проектная работа" in facts:
-        work_type = "по проектной работе"
-    elif any(item in facts for item in ["Reels", "Shorts", "TikTok"]):
+    if any(item in facts for item in ["Reels", "Shorts", "TikTok"]):
         work_type = "по коротким вертикальным роликам"
     elif "YouTube" in facts:
         work_type = "по YouTube-видео"
     elif "рекламные креативы" in facts:
         work_type = "по рекламным креативам"
+    elif "постоянное сотрудничество" in facts:
+        work_type = "о постоянном сотрудничестве"
+    elif "проектная работа" in facts:
+        work_type = "по проектной работе"
     return {"facts": facts[:6], "role": role, "work_type": work_type}
 
 
@@ -766,41 +767,55 @@ def reply_fact_snippets(text: str, budget: str = "") -> list[str]:
 def natural_reply_detail(text: str) -> str:
     context = detect_reply_context(text)
     facts = [str(fact) for fact in context["facts"]]
-    variant = reply_variant_index(text, 6, 4)
-    starts = [
-        "Вижу, что",
-        "По описанию понял, что",
-        "В объявлении указано, что",
-        "Понял, что",
-        "По деталям вижу, что",
-        "Из описания понял, что",
-    ]
-    start = starts[variant]
+    lowered = text.lower()
     if not facts:
-        return f"{start} нужна задача на видеомонтаж, без лишних деталей от себя"
-    first = facts[:3]
-    budget = next((fact for fact in first if fact.startswith("бюджет ")), "")
-    project_only = [fact for fact in first if fact in {"проектная работа", "постоянное сотрудничество"}]
-    content_facts = [fact for fact in first if fact not in {"проектная работа", "постоянное сотрудничество"} and not fact.startswith("бюджет ")]
-    if project_only and budget and not content_facts:
-        project_text = "проектной работе" if project_only[0] == "проектная работа" else "постоянном сотрудничестве"
-        return f"{start} речь о {project_text} с {budget.replace('бюджет ', 'бюджетом ')}"
-    if project_only and not content_facts:
-        project_text = "проектной работе" if project_only[0] == "проектная работа" else "постоянном сотрудничестве"
-        return f"{start} речь о {project_text}"
-    if budget and len(first) == 1:
-        return f"{start} указан {budget.replace('бюджет ', 'бюджет ')}"
-    if len(first) == 1:
-        if first[0] == "субтитры":
-            return f"{start} нужен монтаж с субтитрами"
-        if first[0] == "графические элементы":
-            return f"{start} нужны графические элементы в монтаже"
-        if first[0] == "динамичные ролики":
-            return f"{start} нужен динамичный монтаж"
-        return f"{start} нужен монтаж под {first[0]}"
-    if len(first) == 2:
-        return f"{start} в задаче важны {first[0]} и {first[1]}"
-    return f"{start} в задаче важны {first[0]}, {first[1]} и {first[2]}"
+        return "Готов поработать с вашими исходниками и собрать аккуратный монтаж"
+    if "выступления и закулисье" in facts:
+        return "Интересно поработать с контентом с выступлений, гастролей и закулисья"
+    if "YouTube" in facts:
+        if contains_any(lowered, ["сценар"]):
+            return "Готов работать с YouTube-роликами и собирать монтаж по сценарию и исходникам"
+        if contains_any(lowered, ["исходник"]):
+            return "Готов работать с горизонтальными YouTube-роликами и собирать монтаж из ваших исходников"
+        return "Готов работать с горизонтальными YouTube-роликами и собирать цельный монтаж"
+    if "подкаст" in facts:
+        return "Смогу собрать подкаст в аккуратный выпуск без лишней перегрузки"
+    if "интервью" in facts:
+        return "Смогу смонтировать интервью так, чтобы разговор смотрелся цельно и без лишних пауз"
+    if "рекламные креативы" in facts:
+        return "Готов заняться монтажом рекламных креативов под вашу задачу"
+    if any(fact in facts for fact in ["Reels", "Shorts", "TikTok"]):
+        details: list[str] = []
+        if "динамичные ролики" in facts:
+            details.append("держать динамику")
+        if "субтитры" in facts:
+            details.append("добавлять субтитры")
+        if "графические элементы" in facts:
+            details.append("добавлять графику")
+        if "B-roll" in facts:
+            details.append("подбирать B-roll")
+        if "добавлять субтитры" in details and "добавлять графику" in details:
+            details = [item for item in details if item not in {"добавлять субтитры", "добавлять графику"}]
+            details.append("добавлять субтитры и графику")
+        if details:
+            if len(details) == 1:
+                return f"Готов монтировать короткие ролики и {details[0]}"
+            return f"Готов монтировать короткие ролики, {', '.join(details[:-1])} и {details[-1]}"
+        vertical_phrases = [
+            "Готов собрать короткие вертикальные ролики",
+            "Смогу сделать короткие ролики под соцсети",
+            "Готов сделать вертикальные ролики в нужном темпе",
+            "Готов поработать с такими короткими видео",
+        ]
+        return vertical_phrases[reply_variant_index(text, len(vertical_phrases), 5)]
+    if "образовательный контент" in facts:
+        return "Смогу собрать образовательное видео так, чтобы материал было удобно смотреть"
+    if "блог" in facts:
+        return "Готов работать с видео для блога и собрать ролик из ваших исходников"
+    budget = next((fact for fact in facts if fact.startswith("бюджет ")), "")
+    if budget:
+        return "Готов взяться за монтаж в указанном формате"
+    return "Готов поработать с вашими исходниками"
 
 
 def sentence_start(value: str) -> str:
@@ -827,7 +842,11 @@ def make_reply_draft(config: dict, text: str) -> str:
         "Не задавай вопрос, если всё уже указано.\n"
         "Не придумывай опыт, навыки, обязанности, формат видео, бюджет и условия.\n"
         "Не используй рекламный стиль, канцелярит, Markdown и английский язык.\n"
-        "Длина: 3-5 коротких предложений.\n"
+        "Не пиши: дальше можно сверить референсы и сроки; дальше важны исходники, сроки и формат сдачи; если формат совпадает, можно перейти к ТЗ; могу аккуратно войти в задачу; объём тоже учту; могу ориентироваться на ваше ТЗ; по остальным условиям лучше свериться в переписке; лишнего опыта от себя приписывать не буду; в рамках указанного формата; по деталям вижу; в объявлении указано, что в задаче важны; из описания понял, что в задаче важны.\n"
+        "Также не пиши: Подошла вакансия; Бюджет увидел; С постоянной загрузкой работать удобно; Долгосрочное сотрудничество тоже интересно; Могу взять монтаж таких коротких видео; Могу заняться монтажом коротких вертикальных роликов; Могу монтировать вертикальные ролики в нужном темпе; Могу заняться монтажом по вашим исходникам; Пишу по задаче о монтаже видео.\n"
+        "Никогда не сообщай клиенту, что ты не будешь приписывать опыт или что информации недостаточно.\n"
+        "Не используй одну структуру постоянно. Чередуй сценарии: приветствие + реакция на деталь + вопрос; приветствие + чем поможешь + короткое уточнение; приветствие + интерес к формату + портфолио без вопроса; приветствие + конкретное предложение + вопрос о тестовом; приветствие + долгосрочная работа + вопрос об объёме; приветствие + конкретный контент + предложение начать с тестового.\n"
+        "Обычно 2-3 предложения до портфолио.\n"
         f"\u0412\u0430\u0440\u0438\u0430\u043d\u0442 \u043f\u043e\u0432\u0435\u0434\u0435\u043d\u0438\u044f: {reply_behavior_variant(text)}.\n"
         f"Тип вакансии: {context['work_type']}.\n"
         f"Факты, которые можно упомянуть: {facts_text}.\n"
@@ -883,6 +902,8 @@ def clean_reply_draft(reply: str, config: dict, vacancy_text: str = "") -> str:
     reply = reply.strip()
     if is_invalid_model_output(reply):
         return ""
+    if has_forbidden_reply_phrase(reply):
+        return ""
     if has_unsupported_reply_details(reply, vacancy_text):
         return ""
     portfolio_url = config["portfolio_url"]
@@ -892,7 +913,7 @@ def clean_reply_draft(reply: str, config: dict, vacancy_text: str = "") -> str:
         before, _, after = reply.partition(portfolio_url)
         reply = f"{before.rstrip()}\n\nПортфолио:\n{portfolio_url}{after.strip()}"
     reply = limit_reply_sentences(reply, portfolio_url)
-    if is_invalid_model_output(reply) or has_unsupported_reply_details(reply, vacancy_text):
+    if is_invalid_model_output(reply) or has_forbidden_reply_phrase(reply) or has_unsupported_reply_details(reply, vacancy_text):
         return ""
     return reply.strip()
 
@@ -904,6 +925,46 @@ def limit_reply_sentences(reply: str, portfolio_url: str) -> str:
         return reply
     kept = " ".join(sentence.strip() for sentence in sentences[:4]).strip()
     return f"{kept}\n\nПортфолио:\n{portfolio_url}"
+
+
+def has_forbidden_reply_phrase(reply: str) -> bool:
+    normalized = re.sub(r"\s+", " ", reply.lower())
+    forbidden = [
+        "дальше можно сверить референсы и сроки",
+        "дальше важны исходники",
+        "сроки и формат сдачи",
+        "если формат совпадает",
+        "перейти к тз",
+        "могу аккуратно войти",
+        "объём тоже учту",
+        "объем тоже учту",
+        "могу ориентироваться на ваше тз",
+        "по остальным условиям",
+        "свериться в переписке",
+        "лишнего опыта",
+        "приписывать не буду",
+        "в рамках указанного формата",
+        "по деталям вижу",
+        "в объявлении указано, что в задаче важны",
+        "из описания понял, что в задаче важны",
+        "информации недостаточно",
+        "не хватает информации",
+        "не буду приписывать",
+        "подошла вакансия",
+        "бюджет 200000 ₽ увидел",
+        "бюджет увидел",
+        "с постоянной загрузкой работать удобно",
+        "долгосрочное сотрудничество тоже интересно",
+        "могу взять монтаж таких коротких видео",
+        "могу заняться монтажом коротких вертикальных роликов",
+        "могу монтировать вертикальные ролики в нужном темпе",
+        "смогу монтировать вертикальные ролики в нужном темпе",
+        "могу заняться монтажом по вашим исходникам",
+        "смогу заняться монтажом по вашим исходникам",
+        "пишу по задаче о монтаже видео",
+        "пишу по проекту по",
+    ]
+    return any(phrase in normalized for phrase in forbidden)
 
 
 def is_invalid_model_output(
@@ -966,54 +1027,146 @@ def make_fallback_reply(config: dict, vacancy_text: str = "") -> str:
     facts = [str(fact) for fact in context["facts"]]
     role = str(context["role"])
     work_type = str(context["work_type"])
-    variant = reply_variant_index(vacancy_text, 20)
+    scenario = reply_variant_index(vacancy_text, 6)
+    opener_index = reply_variant_index(vacancy_text, 10, 2)
     greeting = REPLY_GREETINGS[reply_variant_index(vacancy_text, len(REPLY_GREETINGS), 1)]
-    opener = REPLY_OPENERS[reply_variant_index(vacancy_text, len(REPLY_OPENERS), 2)].format(role=role, work_type=work_type)
+    opener_options = [
+        f"Увидел вакансию {role}.",
+        f"Пишу по вакансии {role}.",
+        f"Заинтересовало объявление {work_type}.",
+        f"Увидел, что вы ищете {role}.",
+        f"Заинтересовал проект {work_type}.",
+        f"Заинтересовал формат {work_type}.",
+        "Пишу по вашему объявлению.",
+        f"Увидел задачу {work_type}.",
+        f"Хочу откликнуться на вакансию {role}.",
+        f"Увидел вашу вакансию {role}.",
+    ]
+    opener = opener_options[opener_index]
+    if work_type == "по проектной работе":
+        opener = opener.replace("проект по проектной работе", "проектная задача")
+        opener = opener.replace("Заинтересовал проектная задача", "Заинтересовала проектная задача")
     detail = natural_reply_detail(vacancy_text)
     has_budget = bool(extract_budget(vacancy_text))
     has_volume = contains_any(vacancy_text, ["объем", "объём", "в день", "ежедневн", "в неделю"])
     has_long_term = "постоянное сотрудничество" in facts
     has_test = "тестовое задание" in facts
 
-    detail_variants = [
-        f"{detail}, поэтому могу ориентироваться на ваше ТЗ.",
-        f"{detail}; без лишних обещаний, просто по тому, что указано в объявлении.",
-        f"{detail}, и такой формат мне понятен.",
-        f"{detail}, поэтому откликаюсь именно на эту задачу.",
-        f"{detail}; если нужно, начну с небольшого тестового фрагмента.",
-        f"{detail}, по остальным условиям лучше свериться в переписке.",
-        f"{detail}, без добавления деталей, которых нет в описании.",
-        f"{detail}, и могу работать в рамках указанного формата.",
-        f"{detail}; если формат совпадает, можно перейти к ТЗ.",
-        f"{detail}, поэтому сообщение не общее, а по вашей вакансии.",
-        f"{detail}, и готов ориентироваться на ваши референсы.",
-        f"{detail}; по оплате вижу указанную вилку." if has_budget else f"{detail}; по оплате в тексте деталей не увидел.",
-        f"{detail}, объём тоже учту." if has_volume else f"{detail}, а объём можно уточнить отдельно.",
-        f"{detail}, можно начать с одного ролика или тестового." if not has_test else f"{detail}, тестовое задание увидел.",
-        f"{detail}; постоянный формат работы мне подходит." if has_long_term else f"{detail}; по формату проект выглядит понятным.",
-        f"{detail}, дальше можно сверить референсы и сроки.",
-        f"{detail}; лишнего опыта от себя приписывать не буду.",
-        f"{detail}, поэтому могу аккуратно войти в задачу.",
-        f"{detail}; если нужно, сначала согласуем стиль монтажа.",
-        f"{detail}, дальше важны исходники, сроки и формат сдачи.",
-    ]
-    question = ""
-    if not (has_budget and has_volume and has_test):
-        question = REPLY_QUESTION_VARIANTS[reply_variant_index(vacancy_text, len(REPLY_QUESTION_VARIANTS), 3)]
-        if has_budget and not has_volume:
-            question = "Подскажите, пожалуйста, какой объём роликов планируется?"
-        elif has_volume and not has_budget:
-            question = "Подскажите, пожалуйста, какой бюджет заложен?"
-        elif not has_test:
-            question = "Есть ли тестовое задание?"
+    questions: list[str] = []
+    if not has_volume:
+        questions.extend(
+            [
+                "Сколько роликов обычно нужно делать в неделю?",
+                "Какой объём роликов планируется?",
+                "Сколько видео примерно нужно в месяц?",
+            ]
+        )
+    if not has_budget:
+        questions.extend(
+            [
+                "Какой бюджет заложен на монтаж?",
+                "Оплата фиксированная за ролик или по проекту?",
+            ]
+        )
+    if not has_test:
+        questions.extend(
+            [
+                "Можно начать с тестового ролика?",
+                "Тестовое задание предусмотрено?",
+                "Есть пример монтажа, на который нужно ориентироваться?",
+            ]
+        )
+    question = questions[reply_variant_index(vacancy_text, len(questions), 7)] if questions else ""
 
-    sentences = [greeting, opener, detail_variants[variant]]
-    if has_long_term and not any("постоян" in sentence.lower() or "стабиль" in sentence.lower() for sentence in sentences):
-        sentences.append("Постоянный формат сотрудничества мне подходит.")
-    if question and variant in {1, 4, 7, 10, 12, 14, 17, 19}:
+    help_phrases = [
+        detail,
+        detail.replace("Могу ", "Готов ", 1) if detail.startswith("Могу ") else detail,
+        detail.replace("Могу ", "Смогу ", 1) if detail.startswith("Могу ") else detail,
+    ]
+    help_text = help_phrases[reply_variant_index(vacancy_text, len(help_phrases), 8)]
+    long_texts = [
+        "Формат регулярной работы мне интересен.",
+        "Регулярный монтаж можно выстроить спокойно и без суеты.",
+        "Если нужен человек на долгий срок, такой формат мне подходит.",
+    ]
+    long_text = long_texts[reply_variant_index(vacancy_text, len(long_texts), 9)]
+    test_texts = [
+        "Можно начать с одного тестового ролика, чтобы сверить стиль.",
+        "Предлагаю сначала сделать короткий тестовый фрагмент.",
+        "Для начала можно взять один ролик и посмотреть, совпадаем ли по стилю.",
+    ]
+    test_text = test_texts[reply_variant_index(vacancy_text, len(test_texts), 10)]
+
+    first_sentence = make_reply_first_sentence(greeting, opener, detail, scenario)
+
+    if scenario == 0:
+        sentences = [first_sentence]
+        if question:
+            sentences.append(question)
+    elif scenario == 1:
+        sentences = [first_sentence, help_text + "."]
+        if question and reply_variant_index(vacancy_text, 2, 11) == 0:
+            sentences.append(question)
+    elif scenario == 2:
+        sentences = [first_sentence, help_text + "."]
+    elif scenario == 3:
+        sentences = [first_sentence]
+        if not has_test:
+            sentences.append("Можно начать с тестового ролика?")
+    elif scenario == 4:
+        sentences = [first_sentence]
+        sentences.append(long_text if has_long_term else help_text + ".")
+        if has_long_term and not has_volume:
+            sentences.append("Сколько роликов обычно нужно делать в неделю?")
+    else:
+        sentences = [first_sentence]
+        if any(fact in facts for fact in ["выступления и закулисье", "блог", "образовательный контент", "рекламные креативы"]):
+            sentences.append(detail + ".")
+            if not has_test:
+                sentences.append(test_text)
+        else:
+            sentences.append(help_text + ".")
+
+    if scenario in {2, 5} and len(sentences) > 3:
+        sentences = sentences[:3]
+    if (
+        scenario not in {2, 5}
+        and question
+        and question not in sentences
+        and not any("?" in sentence for sentence in sentences)
+        and len(sentences) < 4
+        and reply_variant_index(vacancy_text, 10, 12) >= 4
+    ):
         sentences.append(question)
+    sentences = dedupe_reply_sentences(sentences)
     body = " ".join(sentences[:4]).strip()
     return f"{body}\n\nПортфолио:\n{portfolio}"
+
+
+def dedupe_reply_sentences(sentences: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for sentence in sentences:
+        normalized = re.sub(r"\s+", " ", sentence.strip().lower().rstrip(".!?"))
+        canonical = re.sub(r"^(здравствуйте|добрый день|привет),\s*", "", normalized)
+        if not normalized or normalized in seen or canonical in seen:
+            continue
+        seen.add(normalized)
+        seen.add(canonical)
+        result.append(sentence)
+    return result
+
+
+def make_reply_first_sentence(greeting: str, opener: str, detail: str, scenario: int) -> str:
+    greeting_word = greeting.rstrip("!")
+    opener_body = opener[:1].lower() + opener[1:].rstrip(".")
+    if scenario == 0:
+        detail_body = detail[:1].lower() + detail[1:].rstrip(".")
+        return f"{greeting_word}, {detail_body}."
+    if scenario in {3, 5}:
+        detail_body = detail[:1].lower() + detail[1:].rstrip(".")
+        return f"{greeting_word}, {detail_body}."
+    return f"{greeting_word}, {opener_body}."
 
 
 def source_contains_any(source_text: str, variants: list[str]) -> bool:
