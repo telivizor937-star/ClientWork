@@ -649,67 +649,158 @@ def extract_project_feature(text: str) -> str:
     return make_title(text)
 
 
-REPLY_BEHAVIOR_VARIANTS = [
-    "\u043d\u0430\u0447\u043d\u0438 \u0441 \u043a\u043e\u0440\u043e\u0442\u043a\u043e\u0433\u043e \u043f\u0440\u0438\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u044f, \u0437\u0430\u0442\u0435\u043c \u0441\u0440\u0430\u0437\u0443 \u043a \u0441\u0443\u0442\u0438",
-    "\u043d\u0430\u0447\u043d\u0438 \u0441\u0440\u0430\u0437\u0443 \u0441 \u0438\u043d\u0442\u0435\u0440\u0435\u0441\u0430 \u043a \u0437\u0430\u0434\u0430\u0447\u0435, \u0431\u0435\u0437 \u043f\u0440\u0438\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u044f",
-    "\u043d\u0430\u0447\u043d\u0438 \u0436\u0438\u0432\u043e \u0438 \u0432 \u043a\u043e\u043d\u0446\u0435 \u0437\u0430\u0434\u0430\u0439 \u043e\u0434\u0438\u043d \u0443\u043c\u0435\u0441\u0442\u043d\u044b\u0439 \u0432\u043e\u043f\u0440\u043e\u0441, \u0435\u0441\u043b\u0438 \u043d\u0435 \u0445\u0432\u0430\u0442\u0430\u0435\u0442 \u0431\u044e\u0434\u0436\u0435\u0442\u0430, \u0441\u0440\u043e\u043a\u043e\u0432 \u0438\u043b\u0438 \u043e\u0431\u044a\u0435\u043c\u0430",
-    "\u043d\u0430\u0447\u043d\u0438 \u0441 \u043a\u0440\u0430\u0442\u043a\u043e\u0433\u043e \u0441\u043e\u0433\u043b\u0430\u0441\u0438\u044f \u043f\u043e \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u043e\u043c\u0443 \u0444\u043e\u0440\u043c\u0430\u0442\u0443",
-    "\u043d\u0430\u0447\u043d\u0438 \u0441 \u043e\u0434\u043d\u043e\u0439 \u043a\u043e\u0440\u043e\u0442\u043a\u043e\u0439 \u0444\u0440\u0430\u0437\u044b \u043f\u043e \u0441\u0430\u043c\u043e\u0439 \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u043d\u043e\u0439 \u0434\u0435\u0442\u0430\u043b\u0438",
+REPLY_STYLE_VARIANTS = [
+    "спокойный короткий отклик без продающих фраз",
+    "живой отклик с акцентом на формат роликов",
+    "деловой, но простой тон без канцелярита",
+    "отклик как сообщение в личку после объявления",
+    "мягкий тон с одним уточняющим вопросом при нехватке условий",
+    "уверенный отклик без заявлений об опыте",
+    "нейтральный отклик для вакансии с малым количеством деталей",
+    "отклик с акцентом на регулярность, если она есть в вакансии",
+    "короткий отклик с упоминанием бюджета, если он указан",
+    "отклик с акцентом на тестовое, если оно упоминается или не хватает деталей",
+    "дружелюбный тон без фамильярности",
+    "лаконичный отклик с одним конкретным вопросом",
+    "отклик с акцентом на YouTube/длинные видео, если это есть в тексте",
+    "отклик с акцентом на вертикальные ролики, если они есть в тексте",
+    "отклик с акцентом на рекламу или креативы, если они есть в тексте",
+    "отклик с акцентом на интервью или подкасты, если они есть в тексте",
+    "отклик с акцентом на образовательный контент, если он есть в тексте",
+    "отклик с акцентом на блог или личный бренд, если это есть в тексте",
+    "очень прямой отклик без вводной воды",
+    "отклик с естественным упоминанием 2-3 деталей из вакансии",
+]
+
+REPLY_GREETINGS = ["Здравствуйте!", "Добрый день!", "Привет!"]
+
+REPLY_OPENERS = [
+    "Заинтересовала ваша вакансия {role}.",
+    "Увидел ваше объявление о поиске {role}.",
+    "Зацепило предложение {work_type}.",
+    "Посмотрел описание вакансии {role}.",
+    "Откликаюсь на вакансию {role}.",
+    "Объявление по {work_type} выглядит подходящим.",
+    "Хочу откликнуться на вакансию {role}.",
+    "Напишу по вакансии {role}.",
+    "Откликаюсь на ваше объявление {work_type}.",
+    "Мне подошёл формат вакансии {role}.",
+]
+
+REPLY_QUESTION_VARIANTS = [
+    "Подскажите, пожалуйста, какой объём роликов планируется?",
+    "Есть ли тестовое задание?",
+    "На каких условиях планируется сотрудничество?",
+    "Подскажите, какие сроки по первым роликам?",
+    "Какой формат тестового вы обычно даёте?",
+    "Подскажите, пожалуйста, какой бюджет заложен?",
 ]
 
 
 def reply_behavior_variant(text: str) -> str:
     digest = hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()
-    return REPLY_BEHAVIOR_VARIANTS[int(digest[:8], 16) % len(REPLY_BEHAVIOR_VARIANTS)]
+    return REPLY_STYLE_VARIANTS[int(digest[:8], 16) % len(REPLY_STYLE_VARIANTS)]
+
+
+def reply_variant_index(text: str, modulo: int, offset: int = 0) -> int:
+    digest = hashlib.sha1((text + str(offset)).encode("utf-8", errors="ignore")).hexdigest()
+    return int(digest[:8], 16) % modulo
+
+
+def detect_reply_context(text: str) -> dict[str, object]:
+    lowered = text.lower()
+    items = [
+        ("Reels", ["reels", "рилс", "рилз", "reel"]),
+        ("Shorts", ["shorts", "шортс"]),
+        ("YouTube", ["youtube", "ютуб"]),
+        ("TikTok", ["tiktok", "tik tok", "тикток", "тик ток"]),
+        ("интервью", ["интервью"]),
+        ("подкаст", ["подкаст"]),
+        ("рекламные креативы", ["реклам", "креатив"]),
+        ("образовательный контент", ["образователь", "обучающ", "курс", "урок"]),
+        ("блог", ["блог", "личный бренд"]),
+        ("постоянное сотрудничество", ["постоян", "долгоср", "в штат", "регулярн"]),
+        ("проектная работа", ["проект", "разово", "единораз"]),
+        ("субтитры", ["субтитр"]),
+        ("графические элементы", ["графич", "элемент"]),
+        ("динамичные ролики", ["динамич"]),
+        ("B-roll", ["b-roll", "b roll", "бирол"]),
+        ("тестовое задание", ["тестов"]),
+    ]
+    facts = [label for label, markers in items if any(marker in lowered for marker in markers)]
+    budget = extract_budget(text)
+    if budget:
+        facts.append(f"бюджет {budget}")
+    role = "видеомонтажёра"
+    if any(item in facts for item in ["Reels", "Shorts", "TikTok"]):
+        role = "рилсмейкера"
+    if "рекламные креативы" in facts:
+        role = "монтажёра рекламных креативов"
+    if "YouTube" in facts:
+        role = "видеомонтажёра для YouTube"
+    if "подкаст" in facts:
+        role = "монтажёра подкастов"
+    if "интервью" in facts:
+        role = "монтажёра интервью"
+    work_type = "о монтаже видео"
+    if "постоянное сотрудничество" in facts:
+        work_type = "о постоянном сотрудничестве"
+    elif "проектная работа" in facts:
+        work_type = "по проектной работе"
+    elif any(item in facts for item in ["Reels", "Shorts", "TikTok"]):
+        work_type = "по коротким вертикальным роликам"
+    elif "YouTube" in facts:
+        work_type = "по YouTube-видео"
+    elif "рекламные креативы" in facts:
+        work_type = "по рекламным креативам"
+    return {"facts": facts[:6], "role": role, "work_type": work_type}
 
 
 def reply_fact_snippets(text: str, budget: str = "") -> list[str]:
-    facts: list[str] = []
-    checks = [
-        ("Reels", ["reels", "\u0440\u0438\u043b\u0441"]),
-        ("Shorts", ["shorts", "\u0448\u043e\u0440\u0442\u0441"]),
-        ("TikTok", ["tiktok", "tik tok", "\u0442\u0438\u043a\u0442\u043e\u043a"]),
-        ("YouTube", ["youtube", "\u044e\u0442\u0443\u0431"]),
-        ("\u0438\u043d\u0442\u0435\u0440\u0432\u044c\u044e", ["\u0438\u043d\u0442\u0435\u0440\u0432\u044c\u044e"]),
-        ("\u043f\u043e\u0434\u043a\u0430\u0441\u0442", ["\u043f\u043e\u0434\u043a\u0430\u0441\u0442"]),
-        ("\u0440\u0435\u043a\u043b\u0430\u043c\u043d\u044b\u0435 \u043a\u0440\u0435\u0430\u0442\u0438\u0432\u044b", ["\u0440\u0435\u043a\u043b\u0430\u043c", "\u043a\u0440\u0435\u0430\u0442\u0438\u0432"]),
-        ("\u0441\u0443\u0431\u0442\u0438\u0442\u0440\u044b", ["\u0441\u0443\u0431\u0442\u0438\u0442\u0440"]),
-        ("\u0434\u0438\u043d\u0430\u043c\u0438\u0447\u043d\u044b\u0439 \u043c\u043e\u043d\u0442\u0430\u0436", ["\u0434\u0438\u043d\u0430\u043c\u0438\u0447"]),
-        ("\u0433\u0440\u0430\u0444\u0438\u0447\u0435\u0441\u043a\u0438\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b", ["\u0433\u0440\u0430\u0444\u0438\u0447", "\u044d\u043b\u0435\u043c\u0435\u043d\u0442"]),
-        ("\u0440\u0435\u0433\u0443\u043b\u044f\u0440\u043d\u044b\u0439 \u043e\u0431\u044a\u0435\u043c", ["\u0432 \u0434\u0435\u043d\u044c", "\u0435\u0436\u0435\u0434\u043d", "\u043e\u0431\u044a\u0435\u043c", "\u043e\u0431\u044a\u0451\u043c"]),
-    ]
-    for label, markers in checks:
-        if contains_any(text, markers):
-            facts.append(label)
-    if budget:
-        facts.append(f"\u0431\u044e\u0434\u0436\u0435\u0442: {budget}")
-    return facts[:5]
+    facts = list(detect_reply_context(text)["facts"])
+    if budget and not any(str(fact).startswith("бюджет ") for fact in facts):
+        facts.append(f"бюджет {budget}")
+    return facts[:6]
 
 
 def natural_reply_detail(text: str) -> str:
-    facts = reply_fact_snippets(text, extract_budget(text))
-    formats = [fact for fact in facts if fact in {"Reels", "Shorts", "TikTok", "YouTube", "\u0438\u043d\u0442\u0435\u0440\u0432\u044c\u044e", "\u043f\u043e\u0434\u043a\u0430\u0441\u0442", "\u0440\u0435\u043a\u043b\u0430\u043c\u043d\u044b\u0435 \u043a\u0440\u0435\u0430\u0442\u0438\u0432\u044b"}]
-    requirements = [fact for fact in facts if fact in {"\u0441\u0443\u0431\u0442\u0438\u0442\u0440\u044b", "\u0434\u0438\u043d\u0430\u043c\u0438\u0447\u043d\u044b\u0439 \u043c\u043e\u043d\u0442\u0430\u0436", "\u0433\u0440\u0430\u0444\u0438\u0447\u0435\u0441\u043a\u0438\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b"}]
-    volume = "\u0440\u0435\u0433\u0443\u043b\u044f\u0440\u043d\u044b\u0439 \u043e\u0431\u044a\u0435\u043c" in facts
-    budget = next((fact.split(": ", 1)[1] for fact in facts if fact.startswith("\u0431\u044e\u0434\u0436\u0435\u0442: ")), "")
-
-    def join_human(items: list[str]) -> str:
-        if len(items) <= 1:
-            return "".join(items)
-        return " \u0438 ".join([", ".join(items[:-1]), items[-1]]).strip()
-
-    parts: list[str] = []
-    if formats:
-        parts.append("\u0433\u043e\u0442\u043e\u0432 \u0432\u0437\u044f\u0442\u044c\u0441\u044f \u0437\u0430 \u043c\u043e\u043d\u0442\u0430\u0436 \u043f\u043e\u0434 " + "/".join(formats[:3]))
-    else:
-        parts.append("\u0433\u043e\u0442\u043e\u0432 \u0432\u0437\u044f\u0442\u044c\u0441\u044f \u0437\u0430 \u043c\u043e\u043d\u0442\u0430\u0436")
-    if requirements:
-        parts.append("\u0443\u0447\u0442\u0443 " + join_human(requirements[:3]))
-    if volume:
-        parts.append("\u043f\u043b\u0430\u043d\u0438\u0440\u0443\u0435\u043c\u044b\u0439 \u043e\u0431\u044a\u0435\u043c \u0443\u0447\u0442\u0443")
-    if budget:
-        parts.append(f"\u043f\u043e \u043e\u043f\u043b\u0430\u0442\u0435 \u0432\u0438\u0436\u0443 {budget}")
-    return ". ".join(sentence_start(part) for part in parts)
+    context = detect_reply_context(text)
+    facts = [str(fact) for fact in context["facts"]]
+    variant = reply_variant_index(text, 6, 4)
+    starts = [
+        "Вижу, что",
+        "По описанию понял, что",
+        "В объявлении указано, что",
+        "Понял, что",
+        "По деталям вижу, что",
+        "Из описания понял, что",
+    ]
+    start = starts[variant]
+    if not facts:
+        return f"{start} нужна задача на видеомонтаж, без лишних деталей от себя"
+    first = facts[:3]
+    budget = next((fact for fact in first if fact.startswith("бюджет ")), "")
+    project_only = [fact for fact in first if fact in {"проектная работа", "постоянное сотрудничество"}]
+    content_facts = [fact for fact in first if fact not in {"проектная работа", "постоянное сотрудничество"} and not fact.startswith("бюджет ")]
+    if project_only and budget and not content_facts:
+        project_text = "проектной работе" if project_only[0] == "проектная работа" else "постоянном сотрудничестве"
+        return f"{start} речь о {project_text} с {budget.replace('бюджет ', 'бюджетом ')}"
+    if project_only and not content_facts:
+        project_text = "проектной работе" if project_only[0] == "проектная работа" else "постоянном сотрудничестве"
+        return f"{start} речь о {project_text}"
+    if budget and len(first) == 1:
+        return f"{start} указан {budget.replace('бюджет ', 'бюджет ')}"
+    if len(first) == 1:
+        if first[0] == "субтитры":
+            return f"{start} нужен монтаж с субтитрами"
+        if first[0] == "графические элементы":
+            return f"{start} нужны графические элементы в монтаже"
+        if first[0] == "динамичные ролики":
+            return f"{start} нужен динамичный монтаж"
+        return f"{start} нужен монтаж под {first[0]}"
+    if len(first) == 2:
+        return f"{start} в задаче важны {first[0]} и {first[1]}"
+    return f"{start} в задаче важны {first[0]}, {first[1]} и {first[2]}"
 
 
 def sentence_start(value: str) -> str:
@@ -722,24 +813,25 @@ def make_reply_draft(config: dict, text: str) -> str:
         return make_fallback_reply(config, text)
 
     facts = reply_fact_snippets(text, extract_budget(text))
-    facts_text = ", ".join(facts) if facts else "\u0442\u043e\u043b\u044c\u043a\u043e \u043e\u0431\u0449\u0438\u0439 \u0437\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u043c\u043e\u043d\u0442\u0430\u0436"
+    context = detect_reply_context(text)
+    facts_text = ", ".join(facts) if facts else "конкретных деталей мало"
     system_prompt = (
-        "\u0422\u044b \u043f\u0438\u0448\u0435\u0448\u044c \u043a\u043e\u0440\u043e\u0442\u043a\u0438\u0439 \u043e\u0442\u043a\u043b\u0438\u043a \u043d\u0430 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044e \u0432\u0438\u0434\u0435\u043e\u043c\u043e\u043d\u0442\u0430\u0436\u0435\u0440\u0430.\n\n"
-        "\u041f\u0438\u0448\u0438 \u043a\u0430\u043a \u043e\u0431\u044b\u0447\u043d\u044b\u0439 \u0447\u0435\u043b\u043e\u0432\u0435\u043a, \u0430 \u043d\u0435 \u043a\u0430\u043a \u043d\u0435\u0439\u0440\u043e\u0441\u0435\u0442\u044c.\n"
-        "\u041d\u0435 \u043f\u043e\u0432\u0442\u043e\u0440\u044f\u0439 \u043e\u0434\u043d\u0443 \u0438 \u0442\u0443 \u0436\u0435 \u0444\u0440\u0430\u0437\u0443 \u0432 \u0440\u0430\u0437\u043d\u044b\u0445 \u043e\u0442\u043a\u043b\u0438\u043a\u0430\u0445.\n"
-        "\u041d\u0435 \u043f\u0438\u0448\u0438 \u0441\u0443\u0445\u0438\u0435 \u0441\u043f\u0438\u0441\u043a\u0438 \u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0445 \u0441\u043b\u043e\u0432 \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043f\u044f\u0442\u0443\u044e.\n"
+        "Ты пишешь короткий отклик на вакансию видеомонтажёра для Telegram.\n\n"
+        "Текст должен выглядеть как сообщение реального монтажёра клиенту.\n"
+        "Почти всегда начинай с одного приветствия: Здравствуйте!, Добрый день! или Привет! Не используй одно и то же приветствие постоянно.\n"
+        "Сразу после приветствия покажи, что отклик относится именно к этой вакансии.\n"
+        "Используй 2-3 факта из вакансии естественным текстом, не списком и не набором ключевых слов.\n"
+        "Если вакансия подразумевает долгосрочное сотрудничество, обязательно упомяни это.\n"
+        "Не используй постоянно фразы: Готов обсудить детали, Могу подключиться, Интересна задача, Если актуально, Готов выполнить, Буду рад сотрудничеству.\n"
+        "Можно задать один естественный вопрос в конце, если не указаны объём, сроки, бюджет или тестовое.\n"
+        "Не задавай вопрос, если всё уже указано.\n"
+        "Не придумывай опыт, навыки, обязанности, формат видео, бюджет и условия.\n"
+        "Не используй рекламный стиль, канцелярит, Markdown и английский язык.\n"
+        "Длина: 3-5 коротких предложений.\n"
         f"\u0412\u0430\u0440\u0438\u0430\u043d\u0442 \u043f\u043e\u0432\u0435\u0434\u0435\u043d\u0438\u044f: {reply_behavior_variant(text)}.\n"
-        f"\u0424\u0430\u043a\u0442\u044b, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043c\u043e\u0436\u043d\u043e \u0443\u043f\u043e\u043c\u044f\u043d\u0443\u0442\u044c: {facts_text}.\n"
-        "\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439 \u0442\u043e\u043b\u044c\u043a\u043e \u0442\u0435 \u0434\u0435\u0442\u0430\u043b\u0438, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043f\u0440\u044f\u043c\u043e \u0435\u0441\u0442\u044c \u0432 \u0442\u0435\u043a\u0441\u0442\u0435 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438.\n"
-        "\u0415\u0441\u043b\u0438 \u0432 \u0442\u0435\u043a\u0441\u0442\u0435 \u0435\u0441\u0442\u044c Reels, \u0434\u0438\u043d\u0430\u043c\u0438\u0447\u043d\u044b\u0435 \u0440\u043e\u043b\u0438\u043a\u0438, \u0441\u0443\u0431\u0442\u0438\u0442\u0440\u044b, \u0433\u0440\u0430\u0444\u0438\u0447\u0435\u0441\u043a\u0438\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u0438\u043b\u0438 \u043e\u0431\u044a\u0435\u043c, \u043c\u043e\u0436\u043d\u043e \u0435\u0441\u0442\u0435\u0441\u0442\u0432\u0435\u043d\u043d\u043e \u0443\u043f\u043e\u043c\u044f\u043d\u0443\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e \u044d\u0442\u0438 \u0444\u0430\u043a\u0442\u044b.\n"
-        "\u041d\u0435 \u043f\u0440\u0438\u0434\u0443\u043c\u044b\u0432\u0430\u0439 \u043e\u0431\u044f\u0437\u0430\u043d\u043d\u043e\u0441\u0442\u0438, \u0444\u043e\u0440\u043c\u0430\u0442 \u0432\u0438\u0434\u0435\u043e, \u043d\u0438\u0448\u0443, \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f, \u0431\u044e\u0434\u0436\u0435\u0442, \u043e\u043f\u044b\u0442, \u043d\u0430\u0432\u044b\u043a\u0438 \u0438 \u043f\u0440\u043e\u0435\u043a\u0442\u044b.\n"
-        "\u0415\u0441\u043b\u0438 \u0434\u0435\u0442\u0430\u043b\u0435\u0439 \u043c\u0430\u043b\u043e, \u043d\u0430\u043f\u0438\u0448\u0438 \u043a\u043e\u0440\u043e\u0442\u043a\u043e \u0438 \u043d\u0435\u0439\u0442\u0440\u0430\u043b\u044c\u043d\u043e, \u0431\u0435\u0437 \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u0438\u043a\u0438 \u043e\u0442 \u0441\u0435\u0431\u044f.\n"
-        "\u041d\u0435 \u0430\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0439 \u0438 \u043d\u0435 \u043f\u0435\u0440\u0435\u0441\u043a\u0430\u0437\u044b\u0432\u0430\u0439 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044e.\n"
-        "\u041d\u0435 \u0443\u043f\u043e\u043c\u0438\u043d\u0430\u0439 \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u044b \u043c\u043e\u043d\u0442\u0430\u0436\u0430, \u0435\u0441\u043b\u0438 \u044d\u0442\u043e \u043d\u0435 \u0441\u043a\u0430\u0437\u0430\u043d\u043e \u0432 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438.\n"
-        "\u0414\u043b\u0438\u043d\u0430: 3-5 \u043a\u043e\u0440\u043e\u0442\u043a\u0438\u0445 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0439.\n"
-        "\u0418\u043d\u043e\u0433\u0434\u0430 \u043d\u0430\u0447\u0438\u043d\u0430\u0439 \u0441 \u043f\u0440\u0438\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u044f, \u0438\u043d\u043e\u0433\u0434\u0430 \u0441\u0440\u0430\u0437\u0443 \u0441 \u0441\u0443\u0442\u0438.\n"
-        "\u041c\u043e\u0436\u043d\u043e \u0437\u0430\u0434\u0430\u0442\u044c \u0440\u043e\u0432\u043d\u043e \u043e\u0434\u0438\u043d \u0443\u043c\u0435\u0441\u0442\u043d\u044b\u0439 \u0432\u043e\u043f\u0440\u043e\u0441, \u0435\u0441\u043b\u0438 \u0432 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0438 \u043d\u0435 \u0445\u0432\u0430\u0442\u0430\u0435\u0442 \u0432\u0430\u0436\u043d\u043e\u0439 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u0438.\n"
-        f"\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e \u0432\u0441\u0435\u0433\u0434\u0430 \u0432 \u0441\u0430\u043c\u043e\u043c \u043a\u043e\u043d\u0446\u0435: \u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {config['portfolio_url']}.\n\n"
+        f"Тип вакансии: {context['work_type']}.\n"
+        f"Факты, которые можно упомянуть: {facts_text}.\n"
+        f"Последняя строка строго в таком формате:\nПортфолио:\n{config['portfolio_url']}\n\n"
         "\u0412\u0435\u0440\u043d\u0438 \u0442\u043e\u043b\u044c\u043a\u043e \u0433\u043e\u0442\u043e\u0432\u044b\u0439 \u043e\u0442\u043a\u043b\u0438\u043a \u043d\u0430 \u0440\u0443\u0441\u0441\u043a\u043e\u043c \u044f\u0437\u044b\u043a\u0435.\n"
         "\u041d\u0435 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0439 \u0440\u0430\u0441\u0441\u0443\u0436\u0434\u0435\u043d\u0438\u044f, \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0438, \u043f\u043b\u0430\u043d \u0438\u043b\u0438 \u0430\u043d\u0430\u043b\u0438\u0437.\n"
         "\u041d\u0435 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439 \u0430\u043d\u0433\u043b\u0438\u0439\u0441\u043a\u0438\u0439 \u044f\u0437\u044b\u043a.\n"
@@ -795,10 +887,10 @@ def clean_reply_draft(reply: str, config: dict, vacancy_text: str = "") -> str:
         return ""
     portfolio_url = config["portfolio_url"]
     if portfolio_url not in reply:
-        reply = f"{reply.rstrip()}\n\n\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {portfolio_url}"
+        reply = f"{reply.rstrip()}\n\nПортфолио:\n{portfolio_url}"
     else:
         before, _, after = reply.partition(portfolio_url)
-        reply = f"{before.rstrip()}\n\n\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {portfolio_url}{after.strip()}"
+        reply = f"{before.rstrip()}\n\nПортфолио:\n{portfolio_url}{after.strip()}"
     reply = limit_reply_sentences(reply, portfolio_url)
     if is_invalid_model_output(reply) or has_unsupported_reply_details(reply, vacancy_text):
         return ""
@@ -806,12 +898,12 @@ def clean_reply_draft(reply: str, config: dict, vacancy_text: str = "") -> str:
 
 
 def limit_reply_sentences(reply: str, portfolio_url: str) -> str:
-    before, _, _ = reply.partition("\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e:")
+    before, _, _ = reply.partition("Портфолио:")
     sentences = re.findall(r"[^.!?\n]+[.!?]", before.strip())
     if not sentences:
         return reply
     kept = " ".join(sentence.strip() for sentence in sentences[:4]).strip()
-    return f"{kept}\n\n\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {portfolio_url}"
+    return f"{kept}\n\nПортфолио:\n{portfolio_url}"
 
 
 def is_invalid_model_output(
@@ -870,23 +962,58 @@ def is_invalid_model_output(
 
 def make_fallback_reply(config: dict, vacancy_text: str = "") -> str:
     portfolio = config["portfolio_url"]
-    variant = int(hashlib.sha1(vacancy_text.encode("utf-8", errors="ignore")).hexdigest()[:8], 16) % 5
-    has_budget = bool(extract_budget(vacancy_text))
-    has_volume = contains_any(vacancy_text, ["\u043e\u0431\u044a\u0435\u043c", "\u043e\u0431\u044a\u0451\u043c", "\u0432 \u0434\u0435\u043d\u044c", "\u0435\u0436\u0435\u0434\u043d"])
+    context = detect_reply_context(vacancy_text)
+    facts = [str(fact) for fact in context["facts"]]
+    role = str(context["role"])
+    work_type = str(context["work_type"])
+    variant = reply_variant_index(vacancy_text, 20)
+    greeting = REPLY_GREETINGS[reply_variant_index(vacancy_text, len(REPLY_GREETINGS), 1)]
+    opener = REPLY_OPENERS[reply_variant_index(vacancy_text, len(REPLY_OPENERS), 2)].format(role=role, work_type=work_type)
     detail = natural_reply_detail(vacancy_text)
+    has_budget = bool(extract_budget(vacancy_text))
+    has_volume = contains_any(vacancy_text, ["объем", "объём", "в день", "ежедневн", "в неделю"])
+    has_long_term = "постоянное сотрудничество" in facts
+    has_test = "тестовое задание" in facts
 
-    if variant == 0:
-        body = f"\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435! {sentence_start(detail)}. \u041c\u043e\u0433\u0443 \u0441\u0434\u0435\u043b\u0430\u0442\u044c \u043f\u043e \u0432\u0430\u0448\u0435\u043c\u0443 \u0422\u0417."
-    elif variant == 1:
-        body = f"{sentence_start(detail)}. \u0415\u0441\u043b\u0438 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f \u0435\u0449\u0435 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u0430, \u043c\u043e\u0433\u0443 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f."
-    elif variant == 2 and not (has_budget and has_volume):
-        question = "\u041c\u043e\u0436\u0435\u0442\u0435 \u0443\u0442\u043e\u0447\u043d\u0438\u0442\u044c \u0432\u0430\u0436\u043d\u044b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u043f\u043e \u0437\u0430\u0434\u0430\u0447\u0435?"
-        body = f"\u0414\u043e\u0431\u0440\u044b\u0439 \u0434\u0435\u043d\u044c! {sentence_start(detail)}. {question}"
-    elif variant == 3:
-        body = f"\u041f\u043e \u0444\u043e\u0440\u043c\u0430\u0442\u0443 \u043c\u043d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442. {sentence_start(detail)}. \u041c\u043e\u0433\u0443 \u0441\u0434\u0435\u043b\u0430\u0442\u044c \u0442\u0435\u0441\u0442\u043e\u0432\u043e\u0435, \u0435\u0441\u043b\u0438 \u043e\u043d\u043e \u043f\u0440\u0435\u0434\u0443\u0441\u043c\u043e\u0442\u0440\u0435\u043d\u043e."
-    else:
-        body = f"\u0417\u0430\u0438\u043d\u0442\u0435\u0440\u0435\u0441\u043e\u0432\u0430\u043b\u0430 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044f. {sentence_start(detail)}. \u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u0435\u0441\u043b\u0438 \u043c\u043e\u0436\u043d\u043e \u0432\u0437\u044f\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443."
-    return f"{body}\n\n\u041f\u043e\u0440\u0442\u0444\u043e\u043b\u0438\u043e: {portfolio}"
+    detail_variants = [
+        f"{detail}, поэтому могу ориентироваться на ваше ТЗ.",
+        f"{detail}; без лишних обещаний, просто по тому, что указано в объявлении.",
+        f"{detail}, и такой формат мне понятен.",
+        f"{detail}, поэтому откликаюсь именно на эту задачу.",
+        f"{detail}; если нужно, начну с небольшого тестового фрагмента.",
+        f"{detail}, по остальным условиям лучше свериться в переписке.",
+        f"{detail}, без добавления деталей, которых нет в описании.",
+        f"{detail}, и могу работать в рамках указанного формата.",
+        f"{detail}; если формат совпадает, можно перейти к ТЗ.",
+        f"{detail}, поэтому сообщение не общее, а по вашей вакансии.",
+        f"{detail}, и готов ориентироваться на ваши референсы.",
+        f"{detail}; по оплате вижу указанную вилку." if has_budget else f"{detail}; по оплате в тексте деталей не увидел.",
+        f"{detail}, объём тоже учту." if has_volume else f"{detail}, а объём можно уточнить отдельно.",
+        f"{detail}, можно начать с одного ролика или тестового." if not has_test else f"{detail}, тестовое задание увидел.",
+        f"{detail}; постоянный формат работы мне подходит." if has_long_term else f"{detail}; по формату проект выглядит понятным.",
+        f"{detail}, дальше можно сверить референсы и сроки.",
+        f"{detail}; лишнего опыта от себя приписывать не буду.",
+        f"{detail}, поэтому могу аккуратно войти в задачу.",
+        f"{detail}; если нужно, сначала согласуем стиль монтажа.",
+        f"{detail}, дальше важны исходники, сроки и формат сдачи.",
+    ]
+    question = ""
+    if not (has_budget and has_volume and has_test):
+        question = REPLY_QUESTION_VARIANTS[reply_variant_index(vacancy_text, len(REPLY_QUESTION_VARIANTS), 3)]
+        if has_budget and not has_volume:
+            question = "Подскажите, пожалуйста, какой объём роликов планируется?"
+        elif has_volume and not has_budget:
+            question = "Подскажите, пожалуйста, какой бюджет заложен?"
+        elif not has_test:
+            question = "Есть ли тестовое задание?"
+
+    sentences = [greeting, opener, detail_variants[variant]]
+    if has_long_term and not any("постоян" in sentence.lower() or "стабиль" in sentence.lower() for sentence in sentences):
+        sentences.append("Постоянный формат сотрудничества мне подходит.")
+    if question and variant in {1, 4, 7, 10, 12, 14, 17, 19}:
+        sentences.append(question)
+    body = " ".join(sentences[:4]).strip()
+    return f"{body}\n\nПортфолио:\n{portfolio}"
 
 
 def source_contains_any(source_text: str, variants: list[str]) -> bool:
