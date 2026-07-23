@@ -1443,17 +1443,22 @@ def default_runtime_state() -> dict:
 
 
 def load_runtime_state() -> dict:
+    state, _ = load_runtime_state_with_status()
+    return state
+
+
+def load_runtime_state_with_status() -> tuple[dict, bool]:
     if not RUNTIME_STATE_FILE.exists():
-        return default_runtime_state()
+        return default_runtime_state(), False
     try:
         loaded = json.loads(RUNTIME_STATE_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return default_runtime_state()
+        return default_runtime_state(), False
     state = default_runtime_state()
     for key, value in loaded.items():
         if key in state:
             state[key] = value
-    return state
+    return state, True
 
 
 def save_runtime_state(state: dict) -> None:
@@ -1550,19 +1555,50 @@ def select_sources_for_run(sources: list[ChannelSource], state: dict, config: di
     return list(selected.values())
 
 
-def is_duplicate_post(post: dict[str, str], state: dict, existing_links: set[str]) -> bool:
+def duplicate_post_reason(post: dict[str, str], state: dict, existing_links: set[str]) -> str:
     message_id = post_message_id(post)
     source_name = channel_name(post["channel"])
     if message_id and message_id <= int(state.get("last_message_ids", {}).get(source_name, 0)):
-        return True
+        return "already_processed"
     if post["link"] in existing_links or post["link"] in set(state.get("sent_urls", [])):
-        return True
+        return "duplicate_url"
     if post_message_key(post) in set(state.get("sent_message_ids", [])):
-        return True
+        return "duplicate_message_id"
     current_hash = text_hash(post["text"])
     if current_hash in set(state.get("sent_text_hashes", [])):
-        return True
-    return is_near_duplicate_text(text_fingerprint(post["text"]), list(state.get("sent_text_fingerprints", [])))
+        return "duplicate_text_hash"
+    if is_near_duplicate_text(text_fingerprint(post["text"]), list(state.get("sent_text_fingerprints", []))):
+        return "near_duplicate_text"
+    return ""
+
+
+def extract_telegram_contact_url(text: str) -> str:
+    patterns = [
+        r"(?:контакт|связ[ьи]|писать|пишите|лс|директ|отклик)[^\n@]*(@[a-zA-Z0-9_]{5,32})",
+        r"(?:контакт|связ[ьи]|писать|пишите|лс|директ|отклик)[^\n]*(?:https?://)?t\.me/([a-zA-Z0-9_]{5,32})",
+        r"@[a-zA-Z0-9_]{5,32}",
+        r"(?:https?://)?t\.me/[a-zA-Z0-9_]{5,32}",
+    ]
+    skip_usernames = {"youtube", "reels", "shorts", "tiktok", "telegram", "workinonlybusiness"}
+    for pattern in patterns:
+        for match in re.findall(pattern, text, flags=re.I):
+            value = match if isinstance(match, str) else next((item for item in match if item), "")
+            if not value:
+                continue
+            if value.startswith("@"):
+                username = value[1:]
+            elif re.fullmatch(r"[a-zA-Z0-9_]{5,32}", value):
+                username = value
+            else:
+                found = re.search(r"t\.me/([a-zA-Z0-9_]{5,32})", value, flags=re.I)
+                username = found.group(1) if found else ""
+            if username and username.lower() not in skip_usernames:
+                return f"https://t.me/{username}"
+    return ""
+
+
+def is_duplicate_post(post: dict[str, str], state: dict, existing_links: set[str]) -> bool:
+    return bool(duplicate_post_reason(post, state, existing_links))
 
 
 def update_last_message_id(state: dict, post: dict[str, str]) -> None:
@@ -1978,7 +2014,13 @@ def edit_message_reply_markup(token: str, chat_id: str, message_id: int, reply_m
         response.read()
 
 
-def status_buttons(lead_id: str, contact_status: str = "not_contacted", client_answered: str = "no") -> dict:
+def status_buttons(
+    lead_id: str,
+    contact_status: str = "not_contacted",
+    client_answered: str = "no",
+    contact_url: str = "",
+    vacancy_url: str = "",
+) -> dict:
     replied_label = "\u2705 \u042f \u043e\u0442\u043a\u043b\u0438\u043a\u043d\u0443\u043b\u0441\u044f"
     answered_label = "\U0001f4ac \u041a\u043b\u0438\u0435\u043d\u0442 \u043e\u0442\u0432\u0435\u0442\u0438\u043b"
     rejected_label = "\u274c \u041d\u0435 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442"
@@ -1988,15 +2030,21 @@ def status_buttons(lead_id: str, contact_status: str = "not_contacted", client_a
         answered_label += " \u2713"
     if contact_status == "skipped":
         rejected_label += " \u2713"
-    return {
-        "inline_keyboard": [
+    keyboard = []
+    if contact_url or vacancy_url:
+        keyboard.append([{"text": "\u2709\ufe0f \u041e\u0442\u043a\u043b\u0438\u043a\u043d\u0443\u0442\u044c\u0441\u044f", "url": contact_url or vacancy_url}])
+    if contact_url and vacancy_url and contact_url.rstrip("/") != vacancy_url.rstrip("/"):
+        keyboard.append([{"text": "\U0001f517 \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u044e", "url": vacancy_url}])
+    keyboard.extend(
+        [
             [
                 {"text": replied_label, "callback_data": f"lead:replied:{lead_id}"},
                 {"text": answered_label, "callback_data": f"lead:client_answered:{lead_id}"},
             ],
             [{"text": rejected_label, "callback_data": f"lead:rejected:{lead_id}"}],
         ]
-    }
+    )
+    return {"inline_keyboard": keyboard}
 
 
 def telegram_credentials(config: dict) -> tuple[str, str]:
@@ -2179,16 +2227,16 @@ def send_telegram_notification(
     config: dict,
     leads: list[Lead],
     errors: list[str],
-) -> None:
+) -> int:
     token, chat_id = telegram_credentials(config)
     if not token or not chat_id:
         raise RuntimeError("Telegram notifications are not configured: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
     if not leads and not config["notify"].get("send_when_no_new_leads", False):
-        return
+        return 0
 
     if not leads:
         send_telegram_message(token, chat_id, "\u041d\u043e\u0432\u044b\u0445 \u043b\u0438\u0434\u043e\u0432 \u043f\u043e Reels-\u043c\u043e\u043d\u0442\u0430\u0436\u0443 \u043d\u0435\u0442.")
-        return
+        return 0
 
     send_telegram_message(token, chat_id, f"\u041d\u043e\u0432\u044b\u0445 \u0432\u0430\u043a\u0430\u043d\u0441\u0438\u0439: {len(leads)}")
 
@@ -2199,13 +2247,22 @@ def send_telegram_notification(
         text = format_lead_telegram_message(lead, brief)
         chunks = split_telegram_text(text)
         for index, chunk in enumerate(chunks):
-            reply_markup = status_buttons(lead.lead_id) if index == len(chunks) - 1 else None
+            reply_markup = (
+                status_buttons(
+                    lead.lead_id,
+                    contact_url=extract_telegram_contact_url(lead.message),
+                    vacancy_url=lead.link,
+                )
+                if index == len(chunks) - 1
+                else None
+            )
             send_telegram_message(token, chat_id, chunk, reply_markup=reply_markup, parse_mode="HTML")
 
     if len(leads) > 12:
         send_telegram_message(token, chat_id, f"\u0415\u0449\u0435 {len(leads) - 12} \u043b\u0438\u0434\u043e\u0432 \u043e\u0441\u0442\u0430\u043b\u0438\u0441\u044c \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435.")
     if errors:
         send_telegram_message(token, chat_id, "\u041e\u0448\u0438\u0431\u043a\u0438 \u043f\u043e \u043a\u0430\u043d\u0430\u043b\u0430\u043c:\n" + "\n".join(errors[:5]))
+    return min(len(leads), 12)
 
 
 def filter_reason_key(reason: str) -> str:
@@ -2252,8 +2309,10 @@ def send_run_report(config: dict, report: dict) -> None:
 
 
 def main() -> int:
+    run_source = os.getenv("GITHUB_EVENT_NAME", "local")
+    commit_sha = os.getenv("GITHUB_SHA", "")
     config = load_config()
-    runtime_state = load_runtime_state()
+    runtime_state, state_loaded = load_runtime_state_with_status()
     existing_links = read_existing_links()
     found_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     now_utc = datetime.now(timezone.utc)
@@ -2265,10 +2324,18 @@ def main() -> int:
     unavailable_channels: list[dict[str, str]] = []
     notification_status = "уведомлений не было"
     started_at = datetime.now().isoformat(timespec="seconds")
+    error_text = "none"
     channels_checked = 0
     posts_found = 0
     existing_posts = 0
+    messages_checked = 0
+    already_processed = 0
+    duplicates_skipped = 0
     filtered_posts = 0
+    telegram_sent = 0
+    telegram_failed = 0
+    state_saved = False
+    last_source_message_id = ""
     filter_reasons = {
         "no_short_video": 0,
         "no_montage": 0,
@@ -2277,11 +2344,16 @@ def main() -> int:
         "other": 0,
     }
 
+    print(f"[state] loaded={state_loaded} file={RUNTIME_STATE_FILE.name}")
+    print("[updates] processing Telegram callback updates")
     process_telegram_updates(config, runtime_state, now_utc)
+    print("[discovery] checking source discovery window")
     discovery_report = run_source_discovery(config, now_utc)
 
+    print("[sources] loading and selecting source group")
     all_channel_sources = load_channel_sources()
     channel_sources = select_sources_for_run(all_channel_sources, runtime_state, config)
+    print(f"[fetch] fetching {len(channel_sources)} selected sources from {len(all_channel_sources)} total")
     channel_pages = fetch_channel_pages(
         channel_sources,
         timeout=int(config.get("channel_timeout_seconds", 20)),
@@ -2316,9 +2388,19 @@ def main() -> int:
 
         posts = sorted(parse_posts(page_html, channel), key=post_message_id)
         posts_found += len(posts)
+        if posts:
+            last_post = max(posts, key=post_message_id)
+            last_source_message_id = f"{channel_name(last_post.get('channel', ''))}:{post_message_id(last_post)}"
+        print(f"[fetch] {channel_name(channel)} posts_found={len(posts)}")
         for post in posts:
-            if is_duplicate_post(post, runtime_state, existing_links):
+            messages_checked += 1
+            duplicate_reason = duplicate_post_reason(post, runtime_state, existing_links)
+            if duplicate_reason:
                 existing_posts += 1
+                if duplicate_reason == "already_processed":
+                    already_processed += 1
+                else:
+                    duplicates_skipped += 1
                 update_last_message_id(runtime_state, post)
                 continue
             if not is_fresh_post(post["date"], max_post_age_hours, now_utc):
@@ -2335,6 +2417,7 @@ def main() -> int:
             fingerprint = text_fingerprint(post["text"])
             if is_near_duplicate_text(fingerprint, current_run_fingerprints):
                 existing_posts += 1
+                duplicates_skipped += 1
                 update_last_message_id(runtime_state, post)
                 continue
             if len(new_leads) >= max_leads_per_run:
@@ -2363,20 +2446,33 @@ def main() -> int:
 
     write_unavailable_channels(unavailable_channels)
     new_leads.sort(key=lambda lead: lead.score, reverse=True)
+    print(
+        "[filter] "
+        f"source_messages_found={posts_found} messages_checked={messages_checked} "
+        f"already_processed={already_processed} duplicates_skipped={duplicates_skipped} "
+        f"filtered_out={filtered_posts} new_vacancies_found={len(new_leads)}"
+    )
 
     if new_leads:
         try:
-            send_telegram_notification(config, new_leads, [])
+            print(f"[telegram] sending {len(new_leads)} vacancies")
+            telegram_sent = send_telegram_notification(config, new_leads, [])
             notification_status = "уведомление отправлено"
             for lead in new_leads:
                 mark_lead_sent(runtime_state, lead)
             append_leads(new_leads)
         except (RuntimeError, urllib.error.URLError) as error:
+            telegram_failed = len(new_leads)
+            error_text = str(error)
             notification_status = f"уведомление не отправлено: {error}"
+    else:
+        print("[telegram] no new vacancies to send")
 
     runtime_state["last_checked_at"] = now_utc.isoformat(timespec="seconds")
     maybe_send_daily_table(config, runtime_state, now_utc)
+    print("[state] saving runtime state")
     save_runtime_state(runtime_state)
+    state_saved = True
 
     report = {
         "started_at": started_at,
@@ -2415,7 +2511,29 @@ def main() -> int:
     ]
     if errors:
         summary.append("Ошибки:\n" + "\n".join(errors))
+    finished_at = datetime.now().isoformat(timespec="seconds")
+    run_summary = [
+        "=== RUN SUMMARY ===",
+        f"run_source: {run_source}",
+        f"commit_sha: {commit_sha or 'unknown'}",
+        f"started_at: {started_at}",
+        f"finished_at: {finished_at}",
+        f"source_messages_found: {posts_found}",
+        f"messages_checked: {messages_checked}",
+        f"filtered_out: {filtered_posts}",
+        f"duplicates_skipped: {duplicates_skipped}",
+        f"already_processed: {already_processed}",
+        f"new_vacancies_found: {len(new_leads)}",
+        f"telegram_sent: {telegram_sent}",
+        f"telegram_failed: {telegram_failed}",
+        f"state_loaded: {str(state_loaded).lower()}",
+        f"state_saved: {str(state_saved).lower()}",
+        f"last_source_message_id: {last_source_message_id or 'none'}",
+        f"error: {error_text}",
+    ]
+    summary.extend([""] + run_summary)
     RUN_LOG_FILE.write_text("\n".join(summary), encoding="utf-8")
+    print("\n".join(run_summary))
     print("\n".join(summary))
     return 0
 

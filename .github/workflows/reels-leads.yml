@@ -25,6 +25,7 @@ permissions:
 
 jobs:
   collect:
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: update bot runtime state') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
