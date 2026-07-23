@@ -1,70 +1,53 @@
-Запуск: 2026-07-23T20:42:41
-Каналов проверено: 35
-Постов найдено: 547
-Пропущено как уже существующие: 539
-Отфильтровано: 8
+Запуск: 2026-07-23T21:47:06
+Каналов проверено: 52
+Постов найдено: 811
+Пропущено как уже существующие: 770
+Отфильтровано: 41
 Причины фильтрации:
 - нет Reels/Shorts/TikTok: 0
 - нет монтажа: 0
 - нет вакансии/заказа: 0
-- стоп-слова: 1
+- стоп-слова: 0
 Новых лидов: 0
 Источников в запуске: 71 из 203
 Discovery: skipped, candidates=0, checked=0, added=0
 Таблица: /home/runner/work/ClientWork/ClientWork/leads.csv
 Уведомления: уведомлений не было
 Ошибки:
-https://t.me/real_video_client: not_public_or_deleted
-https://t.me/production_jobs: empty_or_unavailable
-https://t.me/kinopoisk_jobs: empty_or_unavailable
 https://t.me/tiktok_jobs: empty_or_unavailable
-https://t.me/capcut_jobs: empty_or_unavailable
-https://t.me/videomontage_work: empty_or_unavailable
-https://t.me/vakansii_reelsmaker: not_public_or_deleted
-https://t.me/reels_work: not_public_or_deleted
 https://t.me/producer_job: empty_or_unavailable
 https://t.me/video_editor_jobs: empty_or_unavailable
+https://t.me/capcut_jobs: empty_or_unavailable
+https://t.me/videomontage_work: empty_or_unavailable
+https://t.me/production_jobs: empty_or_unavailable
+https://t.me/vakansii_reelsmaker: not_public_or_deleted
+https://t.me/kinopoisk_jobs: empty_or_unavailable
+https://t.me/reels_work: not_public_or_deleted
+https://t.me/real_video_client: not_public_or_deleted
 https://t.me/motion_jobs: empty_or_unavailable
-https://t.me/after_effects_jobs: empty_or_unavailable
 https://t.me/videographer_jobs: empty_or_unavailable
-https://t.me/studio_jobs: empty_or_unavailable
-https://t.me/media_work: empty_or_unavailable
 https://t.me/premiere_jobs: empty_or_unavailable
+https://t.me/after_effects_jobs: empty_or_unavailable
+https://t.me/studio_jobs: empty_or_unavailable
 https://t.me/podcast_jobs: empty_or_unavailable
-https://t.me/freelance_taverna: not_public_or_deleted
-https://t.me/freelancehunt: empty_or_unavailable
+https://t.me/media_work: empty_or_unavailable
 https://t.me/postproduction_jobs: empty_or_unavailable
-https://t.me/workathome: empty_or_unavailable
-https://t.me/distantsiya: not_public_or_deleted
-https://t.me/freelance_ru: empty_or_unavailable
-https://t.me/designer_jobs: not_public_or_deleted
-https://t.me/media_jobs: empty_or_unavailable
-https://t.me/creative_jobs: not_public_or_deleted
-https://t.me/smm_jobs: empty_or_unavailable
-https://t.me/creator_jobs: empty_or_unavailable
-https://t.me/blogger_jobs: empty_or_unavailable
-https://t.me/Finder_VC: empty_or_unavailable
-https://t.me/workindeed: empty_or_unavailable
-https://t.me/hh_vacancy: empty_or_unavailable
-https://t.me/job_for_junior: empty_or_unavailable
-https://t.me/work_remote: empty_or_unavailable
-https://t.me/zarabotok: empty_or_unavailable
-https://t.me/rabota_remote: empty_or_unavailable
+https://t.me/freejobs5: not_public_or_deleted
 
 === RUN SUMMARY ===
 run_source: schedule
-commit_sha: 237c08f9a244c7b19e2ed796f35bba770f0578d2
-started_at: 2026-07-23T20:42:41
-finished_at: 2026-07-23T20:42:45
-source_messages_found: 547
-messages_checked: 547
-filtered_out: 8
-duplicates_skipped: 0
-already_processed: 539
+commit_sha: d0ee7d80e0a62194452516405ce7c8cbcb684f67
+started_at: 2026-07-23T21:47:06
+finished_at: 2026-07-23T21:47:11
+source_messages_found: 811
+messages_checked: 811
+filtered_out: 41
+duplicates_skipped: 1
+already_processed: 769
 new_vacancies_found: 0
 telegram_sent: 0
 telegram_failed: 0
 state_loaded: true
 state_saved: true
-last_source_message_id: vacancysmm:16673
+last_source_message_id: dsgn_vacancies:5959
 error: none
