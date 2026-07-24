@@ -1,52 +1,52 @@
-Запуск: 2026-07-23T23:43:01
-Каналов проверено: 53
-Постов найдено: 905
-Пропущено как уже существующие: 886
-Отфильтровано: 19
+Запуск: 2026-07-24T01:13:35
+Каналов проверено: 45
+Постов найдено: 792
+Пропущено как уже существующие: 782
+Отфильтровано: 10
 Причины фильтрации:
 - нет Reels/Shorts/TikTok: 0
 - нет монтажа: 0
 - нет вакансии/заказа: 0
 - стоп-слова: 0
 Новых лидов: 0
-Источников в запуске: 71 из 203
+Источников в запуске: 63 из 203
 Discovery: skipped, candidates=0, checked=0, added=0
 Таблица: /home/runner/work/ClientWork/ClientWork/leads.csv
 Уведомления: уведомлений не было
 Ошибки:
-https://t.me/tiktok_jobs: empty_or_unavailable
-https://t.me/production_jobs: empty_or_unavailable
+https://t.me/producer_job: empty_or_unavailable
 https://t.me/video_editor_jobs: empty_or_unavailable
 https://t.me/videomontage_work: empty_or_unavailable
-https://t.me/vakansii_reelsmaker: not_public_or_deleted
-https://t.me/kinopoisk_jobs: empty_or_unavailable
-https://t.me/producer_job: empty_or_unavailable
-https://t.me/real_video_client: not_public_or_deleted
 https://t.me/capcut_jobs: empty_or_unavailable
+https://t.me/tiktok_jobs: empty_or_unavailable
 https://t.me/reels_work: not_public_or_deleted
+https://t.me/production_jobs: empty_or_unavailable
+https://t.me/kinopoisk_jobs: empty_or_unavailable
+https://t.me/vakansii_reelsmaker: not_public_or_deleted
+https://t.me/real_video_client: not_public_or_deleted
 https://t.me/motion_jobs: empty_or_unavailable
-https://t.me/videographer_jobs: empty_or_unavailable
+https://t.me/after_effects_jobs: empty_or_unavailable
 https://t.me/premiere_jobs: empty_or_unavailable
 https://t.me/postproduction_jobs: empty_or_unavailable
-https://t.me/after_effects_jobs: empty_or_unavailable
+https://t.me/podcast_jobs: empty_or_unavailable
+https://t.me/videographer_jobs: empty_or_unavailable
 https://t.me/media_work: empty_or_unavailable
 https://t.me/studio_jobs: empty_or_unavailable
-https://t.me/podcast_jobs: empty_or_unavailable
 
 === RUN SUMMARY ===
 run_source: schedule
-commit_sha: 13583ff670945a9ae2eb8dce5c456ca9274b1f4a
-started_at: 2026-07-23T23:43:01
-finished_at: 2026-07-23T23:43:06
-source_messages_found: 905
-messages_checked: 905
-filtered_out: 19
+commit_sha: f17f7b0b135ec8ca8410645c72857da7fb2c9fc1
+started_at: 2026-07-24T01:13:35
+finished_at: 2026-07-24T01:13:38
+source_messages_found: 792
+messages_checked: 792
+filtered_out: 10
 duplicates_skipped: 0
-already_processed: 886
+already_processed: 782
 new_vacancies_found: 0
 telegram_sent: 0
 telegram_failed: 0
 state_loaded: true
 state_saved: true
-last_source_message_id: youritjob:8304
+last_source_message_id: qzzpfabu888:51317
 error: none
