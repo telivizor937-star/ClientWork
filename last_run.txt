@@ -1,52 +1,52 @@
-Запуск: 2026-07-24T11:26:57
-Каналов проверено: 53
-Постов найдено: 908
-Пропущено как уже существующие: 815
-Отфильтровано: 92
+Запуск: 2026-07-24T13:04:13
+Каналов проверено: 45
+Постов найдено: 791
+Пропущено как уже существующие: 560
+Отфильтровано: 231
 Причины фильтрации:
 - нет Reels/Shorts/TikTok: 0
 - нет монтажа: 0
 - нет вакансии/заказа: 0
-- стоп-слова: 1
-Новых лидов: 1
-Источников в запуске: 71 из 203
+- стоп-слова: 0
+Новых лидов: 0
+Источников в запуске: 63 из 203
 Discovery: skipped, candidates=0, checked=0, added=0
 Таблица: /home/runner/work/ClientWork/ClientWork/leads.csv
-Уведомления: уведомление отправлено
+Уведомления: уведомлений не было
 Ошибки:
-https://t.me/kinopoisk_jobs: empty_or_unavailable
+https://t.me/videomontage_work: empty_or_unavailable
 https://t.me/producer_job: empty_or_unavailable
+https://t.me/capcut_jobs: empty_or_unavailable
+https://t.me/production_jobs: empty_or_unavailable
+https://t.me/video_editor_jobs: empty_or_unavailable
 https://t.me/vakansii_reelsmaker: not_public_or_deleted
 https://t.me/tiktok_jobs: empty_or_unavailable
-https://t.me/video_editor_jobs: empty_or_unavailable
 https://t.me/reels_work: not_public_or_deleted
-https://t.me/production_jobs: empty_or_unavailable
-https://t.me/videomontage_work: empty_or_unavailable
+https://t.me/kinopoisk_jobs: empty_or_unavailable
 https://t.me/real_video_client: not_public_or_deleted
-https://t.me/capcut_jobs: empty_or_unavailable
 https://t.me/motion_jobs: empty_or_unavailable
 https://t.me/premiere_jobs: empty_or_unavailable
+https://t.me/podcast_jobs: empty_or_unavailable
 https://t.me/after_effects_jobs: empty_or_unavailable
-https://t.me/media_work: empty_or_unavailable
 https://t.me/videographer_jobs: empty_or_unavailable
 https://t.me/postproduction_jobs: empty_or_unavailable
 https://t.me/studio_jobs: empty_or_unavailable
-https://t.me/podcast_jobs: empty_or_unavailable
+https://t.me/media_work: empty_or_unavailable
 
 === RUN SUMMARY ===
 run_source: schedule
-commit_sha: 13b30daee97a33b269b3a1ad57a1fac387df380d
-started_at: 2026-07-24T11:26:57
-finished_at: 2026-07-24T11:27:15
-source_messages_found: 908
-messages_checked: 908
-filtered_out: 92
+commit_sha: f640fedb199385e312d4774136b270ca318fcaec
+started_at: 2026-07-24T13:04:13
+finished_at: 2026-07-24T13:04:18
+source_messages_found: 791
+messages_checked: 791
+filtered_out: 231
 duplicates_skipped: 0
-already_processed: 815
-new_vacancies_found: 1
-telegram_sent: 1
+already_processed: 560
+new_vacancies_found: 0
+telegram_sent: 0
 telegram_failed: 0
 state_loaded: true
 state_saved: true
-last_source_message_id: youritjob:8306
+last_source_message_id: kyiv_hey:38354
 error: none
